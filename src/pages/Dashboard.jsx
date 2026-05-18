@@ -1,0 +1,114 @@
+import { BarChart3, Receipt, Users, Utensils, WalletCards } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import PageHeader from "../components/PageHeader";
+import StatCard from "../components/StatCard";
+import { useData } from "../context/DataContext";
+import { money } from "../utils/calculations";
+
+export default function Dashboard() {
+  const { activeMess, members, monthly, activityLogs } = useData();
+  const currency = activeMess?.currency || "BDT";
+
+  const chartData = monthly.memberRows.map((row) => ({
+    name: row.name.split(" ")[0],
+    meals: row.meals,
+    payable: Number(row.payable.toFixed(0)),
+  }));
+
+  return (
+    <div>
+      <PageHeader
+        title="Dashboard"
+        description="Your current month summary, member balance, and recent activity."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <StatCard title="Members" value={members.filter((m) => m.status === "active").length} helper="Active members" icon={Users} />
+        <StatCard title="Total meals" value={monthly.totalMeals.toFixed(1)} helper={monthly.month} icon={Utensils} />
+        <StatCard title="Bazar cost" value={money(monthly.totalMarketCost, currency)} helper="Meal cost only" icon={Receipt} />
+        <StatCard title="Deposits" value={money(monthly.totalDeposits, currency)} helper="This month" icon={WalletCards} />
+        <StatCard title="Meal rate" value={money(monthly.mealRate, currency)} helper="Per meal" icon={BarChart3} />
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
+        <div className="card xl:col-span-2">
+          <h3 className="mb-4 text-lg font-bold">Member meal and payable overview</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="meals" />
+                <Bar dataKey="payable" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="text-lg font-bold">Quick insights</h3>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800">
+              <p className="text-sm text-slate-500">Highest meal taker</p>
+              <p className="font-bold">{monthly.highestMealTaker?.name || "N/A"} · {monthly.highestMealTaker?.meals || 0} meals</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800">
+              <p className="text-sm text-slate-500">Highest depositor</p>
+              <p className="font-bold">{monthly.highestDepositor?.name || "N/A"} · {money(monthly.highestDepositor?.deposit || 0, currency)}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800">
+              <p className="text-sm text-slate-500">Due members</p>
+              <p className="font-bold">{monthly.dueMembers.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div className="card">
+          <h3 className="mb-4 text-lg font-bold">Final settlement preview</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[650px]">
+              <thead className="table-head">
+                <tr>
+                  <th className="px-4 py-3">Member</th>
+                  <th className="px-4 py-3">Meals</th>
+                  <th className="px-4 py-3">Payable</th>
+                  <th className="px-4 py-3">Deposit</th>
+                  <th className="px-4 py-3">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthly.memberRows.map((row) => (
+                  <tr key={row.memberId}>
+                    <td className="table-cell font-semibold">{row.name}</td>
+                    <td className="table-cell">{row.meals}</td>
+                    <td className="table-cell">{money(row.payable, currency)}</td>
+                    <td className="table-cell">{money(row.deposit, currency)}</td>
+                    <td className={`table-cell font-bold ${row.balance >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {money(row.balance, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="mb-4 text-lg font-bold">Recent activity</h3>
+          <div className="space-y-3">
+            {activityLogs.slice(0, 6).map((item) => (
+              <div key={item.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="text-sm font-medium">{item.action}</p>
+                <p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()} by {item.actorName}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
