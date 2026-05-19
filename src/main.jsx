@@ -16,4 +16,5 @@ createRoot(document.getElementById("root")).render(
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
-);\n\nregisterServiceWorker();\n
+);
+registerServiceWorker();
