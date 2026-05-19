@@ -3,18 +3,24 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup, isSupabaseConfigured } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+
     try {
-      signup(form);
+      await signup(form);
       navigate("/app");
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -22,7 +28,11 @@ export default function Signup() {
     <div className="grid min-h-screen place-items-center bg-slate-50 px-4">
       <form className="card w-full max-w-md" onSubmit={submit}>
         <h1 className="text-2xl font-bold">Create account</h1>
-        <p className="mt-1 text-sm text-slate-500">Your mess workspace will be created automatically.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          {isSupabaseConfigured
+            ? "This will create a Supabase Auth account and a local-first mess workspace."
+            : "Supabase is not configured, so signup will run in local demo mode."}
+        </p>
 
         {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>}
 
@@ -43,7 +53,9 @@ export default function Signup() {
           <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={6} required />
         </div>
 
-        <button className="btn-primary mt-6 w-full">Create account</button>
+        <button className="btn-primary mt-6 w-full" disabled={loading}>
+          {loading ? "Creating account..." : "Create account"}
+        </button>
 
         <p className="mt-4 text-center text-sm text-slate-500">
           Already have an account? <Link className="font-semibold text-emerald-600" to="/login">Login</Link>

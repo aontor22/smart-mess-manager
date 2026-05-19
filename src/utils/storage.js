@@ -1,4 +1,16 @@
-const KEY = "smart_mess_manager_v1";
+import { idbDelete, idbGet, idbSet } from "./indexedDb";
+
+const KEY_PREFIX = "smart_mess_manager_v2";
+const AUTH_CACHE_KEY = `${KEY_PREFIX}_cached_auth_user`;
+
+const demoUser = {
+  id: "demo-manager-user",
+  name: "Demo Manager",
+  email: "manager@demo.com",
+  password: "123456",
+  phone: "01700000000",
+  authProvider: "local",
+};
 
 const id = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -6,29 +18,50 @@ const id = () => {
 };
 
 export const today = () => new Date().toISOString().slice(0, 10);
-
 export const monthKey = () => new Date().toISOString().slice(0, 7);
+export const makeId = id;
 
-export const defaultData = () => {
+const normalizeUser = (user = demoUser) => ({
+  id: user.id || demoUser.id,
+  name: user.name || user.full_name || user.email?.split("@")[0] || demoUser.name,
+  email: user.email || demoUser.email,
+  password: user.password || "",
+  phone: user.phone || "",
+  authProvider: user.authProvider || "local",
+});
+
+export const ownerKey = (ownerId = "guest") => `${KEY_PREFIX}_store_${ownerId || "guest"}`;
+
+export const defaultData = (user = demoUser) => {
+  const manager = normalizeUser(user);
   const messId = id();
-  const managerUserId = id();
   const memberOne = id();
   const memberTwo = id();
   const memberThree = id();
   const m = monthKey();
+  const now = new Date().toISOString();
 
   return {
+    version: 2,
+    ownerId: manager.id,
     users: [
       {
-        id: managerUserId,
-        name: "Demo Manager",
-        email: "manager@demo.com",
-        password: "123456",
-        phone: "01700000000",
+        id: manager.id,
+        name: manager.name,
+        email: manager.email,
+        password: manager.password || "123456",
+        phone: manager.phone,
+        authProvider: manager.authProvider,
       },
     ],
-    currentUserId: null,
+    currentUserId: manager.id,
     activeMessId: messId,
+    syncMeta: {
+      updatedAt: now,
+      lastSyncedAt: null,
+      lastSyncSource: "local",
+      pendingSync: true,
+    },
     messes: [
       {
         id: messId,
@@ -38,17 +71,17 @@ export const defaultData = () => {
         currency: "BDT",
         monthlyRent: 12000,
         serviceCharge: 1500,
-        managerUserId,
+        managerUserId: manager.id,
       },
     ],
     members: [
       {
         id: memberOne,
         messId,
-        userId: managerUserId,
-        name: "Demo Manager",
-        email: "manager@demo.com",
-        phone: "01700000000",
+        userId: manager.id,
+        name: manager.name,
+        email: manager.email,
+        phone: manager.phone || "01700000000",
         roomNo: "A1",
         role: "manager",
         joinDate: `${m}-01`,
@@ -101,10 +134,10 @@ export const defaultData = () => {
       { id: id(), messId, expenseDate: `${m}-03`, title: "WiFi bill", category: "WiFi", amount: 1200, splitType: "shared", assignedMemberId: "", note: "" },
     ],
     activityLogs: [
-      { id: id(), messId, actorName: "Demo Manager", action: "Created demo mess account", createdAt: new Date().toISOString() },
+      { id: id(), messId, actorName: manager.name, action: "Created demo mess account", createdAt: now },
     ],
     notices: [
-      { id: id(), messId, senderName: "Demo Manager", message: "Please update your meal before 10 PM.", pinned: true, createdAt: new Date().toISOString() },
+      { id: id(), messId, senderName: manager.name, message: "Please update your meal before 10 PM.", pinned: true, createdAt: now },
     ],
     toletPosts: [
       {
@@ -114,39 +147,100 @@ export const defaultData = () => {
         location: "Bashundhara R/A",
         rent: 6500,
         facilities: "WiFi, gas, fridge, attached balcony",
-        contact: "01700000000",
+        contact: manager.phone || "01700000000",
         availableFrom: `${m}-20`,
         imageUrl: "",
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       },
     ],
   };
 };
 
-export const loadStore = () => {
-  const raw = localStorage.getItem(KEY);
+export const touchStore = (store, extra = {}) => ({
+  ...store,
+  syncMeta: {
+    ...(store.syncMeta || {}),
+    updatedAt: new Date().toISOString(),
+    pendingSync: true,
+    ...extra,
+  },
+});
+
+export const loadStore = (ownerId = "guest", user = demoUser) => {
+  const key = ownerKey(ownerId);
+  const raw = localStorage.getItem(key);
   if (!raw) {
-    const data = defaultData();
-    localStorage.setItem(KEY, JSON.stringify(data));
+    const data = defaultData(user);
+    saveStore(data, ownerId);
     return data;
   }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      syncMeta: parsed.syncMeta || {
+        updatedAt: new Date().toISOString(),
+        lastSyncedAt: null,
+        lastSyncSource: "local",
+        pendingSync: true,
+      },
+    };
+  } catch {
+    const data = defaultData(user);
+    saveStore(data, ownerId);
+    return data;
+  }
+};
+
+export const loadStoreAsync = async (ownerId = "guest", user = demoUser) => {
+  const key = ownerKey(ownerId);
+  const fromIndexedDb = await idbGet(key);
+  if (fromIndexedDb) {
+    localStorage.setItem(key, JSON.stringify(fromIndexedDb));
+    return fromIndexedDb;
+  }
+  return loadStore(ownerId, user);
+};
+
+export const saveStore = (data, ownerId = data?.ownerId || "guest") => {
+  const key = ownerKey(ownerId);
+  localStorage.setItem(key, JSON.stringify(data));
+  idbSet(key, data);
+};
+
+export const resetStore = (ownerId = "guest", user = demoUser) => {
+  const data = defaultData(user);
+  saveStore(data, ownerId);
+  return data;
+};
+
+export const cacheAuthUser = async (user) => {
+  if (!user) return;
+  const cleanUser = normalizeUser(user);
+  localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(cleanUser));
+  await idbSet(AUTH_CACHE_KEY, cleanUser);
+};
+
+export const getCachedAuthUser = async () => {
+  const fromIdb = await idbGet(AUTH_CACHE_KEY);
+  if (fromIdb) return fromIdb;
+
+  const raw = localStorage.getItem(AUTH_CACHE_KEY);
+  if (!raw) return null;
   try {
     return JSON.parse(raw);
   } catch {
-    const data = defaultData();
-    localStorage.setItem(KEY, JSON.stringify(data));
-    return data;
+    return null;
   }
 };
 
-export const saveStore = (data) => {
-  localStorage.setItem(KEY, JSON.stringify(data));
+export const clearCachedAuthUser = async () => {
+  localStorage.removeItem(AUTH_CACHE_KEY);
+  await idbDelete(AUTH_CACHE_KEY);
 };
 
-export const makeId = id;
-
-export const resetStore = () => {
-  const data = defaultData();
-  saveStore(data);
-  return data;
+export const demoCredentials = {
+  email: demoUser.email,
+  password: demoUser.password,
 };

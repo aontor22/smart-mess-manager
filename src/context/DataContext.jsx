@@ -1,30 +1,116 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { loadStore, makeId, resetStore, saveStore } from "../utils/storage";
+import {
+  loadStore,
+  loadStoreAsync,
+  makeId,
+  resetStore,
+  saveStore,
+  touchStore,
+} from "../utils/storage";
 import { calculateMonthly } from "../utils/calculations";
 import { useAuth } from "./AuthContext";
+import { pushStoreToSupabase, syncLocalWithSupabase } from "../utils/cloudSync";
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { currentUser } = useAuth();
-  const [store, setStore] = useState(() => loadStore());
+  const { currentUser, authLoading, isSupabaseConfigured } = useAuth();
+  const ownerId = currentUser?.id || "guest";
+  const [store, setStore] = useState(() => loadStore("guest"));
+  const [syncStatus, setSyncStatus] = useState("offline-ready");
 
   useEffect(() => {
-    const update = () => setStore(loadStore());
-    window.addEventListener("smm-store-updated", update);
-    return () => window.removeEventListener("smm-store-updated", update);
-  }, []);
+    if (authLoading) return;
+
+    let cancelled = false;
+
+    const hydrate = async () => {
+      const local = await loadStoreAsync(ownerId, currentUser || undefined);
+      if (cancelled) return;
+
+      setStore(local);
+
+      if (currentUser && isSupabaseConfigured && navigator.onLine) {
+        setSyncStatus("syncing");
+        const result = await syncLocalWithSupabase(local, currentUser);
+        if (cancelled) return;
+
+        if (result?.store) {
+          saveStore(result.store, ownerId);
+          setStore(result.store);
+        }
+
+        setSyncStatus(result.ok ? "synced" : "local-only");
+      } else {
+        setSyncStatus(navigator.onLine ? "local-only" : "offline");
+      }
+    };
+
+    hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId, currentUser?.email, authLoading, isSupabaseConfigured]);
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      if (!currentUser || !store) return;
+      setSyncStatus("syncing");
+      const result = await syncLocalWithSupabase(store, currentUser);
+      if (result?.store) {
+        saveStore(result.store, ownerId);
+        setStore(result.store);
+      }
+      setSyncStatus(result.ok ? "synced" : "local-only");
+    };
+
+    const handleOffline = () => setSyncStatus("offline");
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [currentUser, store, ownerId]);
 
   const persist = (nextStore) => {
-    saveStore(nextStore);
-    setStore(nextStore);
+    const touched = touchStore(
+      {
+        ...nextStore,
+        ownerId,
+        currentUserId: currentUser?.id || nextStore.currentUserId,
+      },
+      {
+        lastSyncSource: navigator.onLine ? "indexeddb" : "offline-indexeddb",
+      }
+    );
+
+    saveStore(touched, ownerId);
+    setStore(touched);
     window.dispatchEvent(new Event("smm-store-updated"));
+
+    if (currentUser && isSupabaseConfigured && navigator.onLine) {
+      setSyncStatus("syncing");
+      pushStoreToSupabase(touched, currentUser).then((result) => {
+        if (result.ok && result.store) {
+          saveStore(result.store, ownerId);
+          setStore(result.store);
+          setSyncStatus("synced");
+        } else {
+          setSyncStatus("pending");
+        }
+      });
+    } else {
+      setSyncStatus(navigator.onLine ? "local-only" : "offline");
+    }
   };
 
   const activeMess = store.messes.find((mess) => mess.id === store.activeMessId) || store.messes[0];
   const messId = activeMess?.id;
 
-  const users = store.users || [];
   const members = store.members.filter((member) => member.messId === messId);
   const meals = store.meals.filter((meal) => meal.messId === messId);
   const marketCosts = store.marketCosts.filter((item) => item.messId === messId);
@@ -40,17 +126,6 @@ export function DataProvider({ children }) {
 
   const currentMember = members.find((member) => member.userId === currentUser?.id);
   const isManager = currentMember?.role === "manager" || activeMess?.managerUserId === currentUser?.id;
-
-  const findRegisteredUserByEmail = (email) => {
-    const normalized = String(email || "").trim().toLowerCase();
-    if (!normalized) return null;
-    return users.find((user) => String(user.email || "").trim().toLowerCase() === normalized) || null;
-  };
-
-  const isUserAlreadyMember = (userId, ignoreMemberId = null) => {
-    if (!userId) return false;
-    return members.some((member) => member.userId === userId && member.id !== ignoreMemberId);
-  };
 
   const log = (data, action) => {
     return {
@@ -69,7 +144,7 @@ export function DataProvider({ children }) {
   };
 
   const addRow = (collection, row, action) => {
-    const fresh = loadStore();
+    const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
       ...fresh,
       [collection]: [...fresh[collection], { id: makeId(), messId, ...row }],
@@ -78,7 +153,7 @@ export function DataProvider({ children }) {
   };
 
   const updateRow = (collection, rowId, patch, action) => {
-    const fresh = loadStore();
+    const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
       ...fresh,
       [collection]: fresh[collection].map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
@@ -87,7 +162,7 @@ export function DataProvider({ children }) {
   };
 
   const deleteRow = (collection, rowId, action) => {
-    const fresh = loadStore();
+    const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
       ...fresh,
       [collection]: fresh[collection].filter((row) => row.id !== rowId),
@@ -96,7 +171,7 @@ export function DataProvider({ children }) {
   };
 
   const updateMess = (patch) => {
-    const fresh = loadStore();
+    const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
       ...fresh,
       messes: fresh.messes.map((mess) => (mess.id === messId ? { ...mess, ...patch } : mess)),
@@ -105,7 +180,7 @@ export function DataProvider({ children }) {
   };
 
   const transferManager = (memberId) => {
-    const fresh = loadStore();
+    const fresh = loadStore(ownerId, currentUser || undefined);
     const selectedMember = fresh.members.find((member) => member.id === memberId);
     const next = {
       ...fresh,
@@ -122,9 +197,19 @@ export function DataProvider({ children }) {
   };
 
   const resetDemoData = () => {
-    const data = resetStore();
-    setStore(data);
-    window.dispatchEvent(new Event("smm-store-updated"));
+    const data = resetStore(ownerId, currentUser || undefined);
+    persist(data);
+  };
+
+  const manualSync = async () => {
+    if (!currentUser) return;
+    setSyncStatus("syncing");
+    const result = await syncLocalWithSupabase(store, currentUser);
+    if (result?.store) {
+      saveStore(result.store, ownerId);
+      setStore(result.store);
+    }
+    setSyncStatus(result.ok ? "synced" : "pending");
   };
 
   const monthly = activeMess
@@ -134,7 +219,6 @@ export function DataProvider({ children }) {
   const value = useMemo(
     () => ({
       store,
-      users,
       activeMess,
       members,
       meals,
@@ -147,8 +231,8 @@ export function DataProvider({ children }) {
       currentMember,
       isManager,
       monthly,
-      findRegisteredUserByEmail,
-      isUserAlreadyMember,
+      syncStatus,
+      manualSync,
       addRow,
       updateRow,
       deleteRow,
@@ -156,7 +240,7 @@ export function DataProvider({ children }) {
       transferManager,
       resetDemoData,
     }),
-    [store, activeMess, currentUser]
+    [store, activeMess, currentUser, syncStatus]
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

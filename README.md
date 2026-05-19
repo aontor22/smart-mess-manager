@@ -1,32 +1,37 @@
 # Smart Mess Manager
 
-A complete React + Vite starter web app for managing mess, hostel, shared apartment, and roommate meal expenses.
+A Supabase-ready, offline-first React + Vite web app for managing mess, hostel, shared apartment, and roommate meal expenses.
 
-## Features
+## Included
 
-- Auth flow with demo login and signup
+- Supabase Auth login/signup
+- Supabase cloud sync
+- IndexedDB offline storage
+- Automatic sync when internet returns
+- Service Worker and PWA support
 - Protected dashboard
-- Mess profile and role-aware settings
-- Member CRUD
-- Daily meal tracking with 0.5 meal support
-- Market or bazar cost tracking
+- Member management
+- Daily meal tracking
+- Market/bazar cost tracking
 - Deposit tracking
-- Shared and assigned expenses
-- Automatic monthly calculation
-- Member-wise monthly settlement
-- PDF export and CSV export
+- Other expenses
+- Automatic meal rate and monthly settlement
+- PDF and CSV report export
 - Activity log
 - Notice board
 - To-let board
 - Dark mode
 - Mobile responsive layout
-- LocalStorage mock database
-- Supabase schema included
 
-## Demo Login
+## Offline sync logic
 
-Email: `manager@demo.com`  
-Password: `123456`
+1. When the user changes data, the app saves it locally in IndexedDB.
+2. If internet is available and Supabase is configured, the app pushes the latest app state to Supabase.
+3. If the user is offline, changes stay in IndexedDB.
+4. When the browser comes back online, the app automatically syncs the local state to Supabase.
+5. If cloud data is newer than local data, the app pulls the cloud version.
+
+Current sync strategy: local-first JSONB app-state snapshot per authenticated user.
 
 ## Install
 
@@ -39,55 +44,53 @@ npm run dev
 
 ```bash
 npm run build
-npm run preview
 ```
 
-## Backend
+## Supabase setup
 
-This version uses LocalStorage so it works instantly.  
-For real backend integration, use `database/supabase-schema.sql` as the starting database schema.
+1. Create a new Supabase project.
+2. Open Supabase Dashboard > SQL Editor.
+3. Run this file:
 
-## Main calculation
+```txt
+database/supabase-schema.sql
+```
 
-Meal rate = total market cost / total meals
+4. Go to Project Settings > API.
+5. Copy Project URL and anon/public key.
+6. Create `.env` in the root folder:
 
-Member payable = member meal count × meal rate + shared expense share + assigned expenses
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_or_publishable_key
+```
 
-Balance = deposit − payable
+7. On Vercel, add the same variables in Project > Settings > Environment Variables.
 
-Positive balance means the member will get money back.  
-Negative balance means the member needs to pay.
+## Important Supabase Auth setting
 
+For easiest testing, disable email confirmation:
 
-## Offline/PWA Support
+Supabase Dashboard > Authentication > Providers > Email > Confirm email = OFF
 
-This project now includes offline support.
+If email confirmation stays ON, users may need to confirm email before cloud sync works.
 
-Included files:
-- `public/sw.js`
-- `public/manifest.webmanifest`
-- `public/offline.html`
-- `public/pwa-icon.svg`
-- `src/utils/registerServiceWorker.js`
+## Never expose
 
-How it works:
-- The app shell is cached after the first successful visit.
-- React/Vite build assets are cached automatically when loaded.
-- LocalStorage keeps mess data available in the same browser.
-- After one successful online load, the app can reopen offline.
-- For real multi-device sync, connect Supabase or Firebase later.
+Do not put these in GitHub or frontend code:
 
-Important:
-Service workers work properly on HTTPS domains like Vercel production URLs. They usually do not fully work from local `file://` paths.
+- service_role key
+- database password
+- JWT secret
+- any private secret key
 
-## Member Authentication Rule
+Only use the anon/public key in the frontend.
 
-Random emails cannot be added as members anymore.
+## Demo mode
 
-Before adding a new member:
-1. The member must sign up first.
-2. The manager must add the member using the same registered email.
-3. If the email is not registered, the app blocks the member creation.
+If Supabase environment variables are not set, the app runs in local demo mode.
 
-This keeps member records linked with app authentication users in the LocalStorage demo system.
-
+```txt
+Email: manager@demo.com
+Password: 123456
+```

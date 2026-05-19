@@ -1,110 +1,180 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { loadStore, makeId, saveStore } from "../utils/storage";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import {
+  cacheAuthUser,
+  clearCachedAuthUser,
+  demoCredentials,
+  getCachedAuthUser,
+  loadStore,
+  makeId,
+  saveStore,
+} from "../utils/storage";
+import { upsertProfile } from "../utils/cloudSync";
 
 const AuthContext = createContext(null);
 
+const formatSupabaseUser = (supabaseUser) => ({
+  id: supabaseUser.id,
+  name:
+    supabaseUser.user_metadata?.full_name ||
+    supabaseUser.user_metadata?.name ||
+    supabaseUser.email?.split("@")[0] ||
+    "User",
+  email: supabaseUser.email,
+  phone: supabaseUser.user_metadata?.phone || "",
+  authProvider: "supabase",
+});
+
 export function AuthProvider({ children }) {
-  const [store, setStore] = useState(() => loadStore());
   const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState(isSupabaseConfigured ? "supabase" : "local");
 
   useEffect(() => {
-    const fresh = loadStore();
-    setStore(fresh);
-    setCurrentUser(fresh.users.find((u) => u.id === fresh.currentUserId) || null);
-  }, []);
+    let mounted = true;
 
-  const persist = (nextStore) => {
-    saveStore(nextStore);
-    setStore(nextStore);
-    setCurrentUser(nextStore.users.find((u) => u.id === nextStore.currentUserId) || null);
-    window.dispatchEvent(new Event("smm-store-updated"));
-  };
+    const initAuth = async () => {
+      const cached = await getCachedAuthUser();
+      if (mounted && cached) setCurrentUser(cached);
 
-  const login = (email, password) => {
-    const fresh = loadStore();
-    const user = fresh.users.find(
-      (item) => item.email.toLowerCase() === email.toLowerCase() && item.password === password
-    );
-    if (!user) throw new Error("Invalid email or password");
-    persist({ ...fresh, currentUserId: user.id });
-    return user;
-  };
+      if (isSupabaseConfigured && supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.user && mounted) {
+          const user = formatSupabaseUser(data.session.user);
+          setCurrentUser(user);
+          setAuthMode("supabase");
+          await cacheAuthUser(user);
+        }
 
-  const signup = ({ name, email, password, phone }) => {
-    const fresh = loadStore();
-    const exists = fresh.users.some((user) => user.email.toLowerCase() === email.toLowerCase());
-    if (exists) throw new Error("This email is already registered");
+        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          if (session?.user) {
+            const user = formatSupabaseUser(session.user);
+            setCurrentUser(user);
+            setAuthMode("supabase");
+            await cacheAuthUser(user);
+          } else {
+            setCurrentUser(null);
+            await clearCachedAuthUser();
+          }
+        });
 
-    const userId = makeId();
-    const messId = makeId();
-    const memberId = makeId();
-    const month = new Date().toISOString().slice(0, 7);
+        if (mounted) setAuthLoading(false);
+        return () => listener?.subscription?.unsubscribe?.();
+      }
 
-    const user = { id: userId, name, email, password, phone };
-    const nextStore = {
-      ...fresh,
-      users: [...fresh.users, user],
-      currentUserId: userId,
-      activeMessId: messId,
-      messes: [
-        ...fresh.messes,
-        {
-          id: messId,
-          name: `${name}'s Mess`,
-          address: "",
-          month,
-          currency: "BDT",
-          monthlyRent: 0,
-          serviceCharge: 0,
-          managerUserId: userId,
-        },
-      ],
-      members: [
-        ...fresh.members,
-        {
-          id: memberId,
-          messId,
-          userId,
-          name,
-          email,
-          phone,
-          roomNo: "",
-          role: "manager",
-          joinDate: `${month}-01`,
-          status: "active",
-        },
-      ],
-      activityLogs: [
-        ...fresh.activityLogs,
-        {
-          id: makeId(),
-          messId,
-          actorName: name,
-          action: "Created a new mess workspace",
-          createdAt: new Date().toISOString(),
-        },
-      ],
+      if (mounted) setAuthLoading(false);
     };
 
-    persist(nextStore);
+    initAuth();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const login = async (email, password) => {
+    if (isSupabaseConfigured && supabase && navigator.onLine) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(error.message);
+
+      const user = formatSupabaseUser(data.user);
+      setCurrentUser(user);
+      setAuthMode("supabase");
+      await cacheAuthUser(user);
+      await upsertProfile(user);
+      return user;
+    }
+
+    const guestStore = loadStore("guest");
+    const user = guestStore.users.find(
+      (item) => item.email.toLowerCase() === email.toLowerCase() && item.password === password
+    );
+
+    if (!user) {
+      throw new Error(
+        isSupabaseConfigured
+          ? "You are offline. Reconnect and login once, then the app can reopen offline in this browser."
+          : "Invalid email or password"
+      );
+    }
+
+    const cleanUser = { ...user, authProvider: "local" };
+    setCurrentUser(cleanUser);
+    setAuthMode("local");
+    await cacheAuthUser(cleanUser);
+    return cleanUser;
+  };
+
+  const signup = async ({ name, email, password, phone }) => {
+    if (isSupabaseConfigured && supabase && navigator.onLine) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+            phone,
+          },
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.user) throw new Error("Signup failed. Please try again.");
+
+      const user = formatSupabaseUser(data.user);
+      setCurrentUser(user);
+      setAuthMode("supabase");
+      await cacheAuthUser(user);
+      await upsertProfile(user);
+      return user;
+    }
+
+    const guestStore = loadStore("guest");
+    const exists = guestStore.users.some((user) => user.email.toLowerCase() === email.toLowerCase());
+    if (exists) throw new Error("This email is already registered in local demo mode");
+
+    const user = {
+      id: makeId(),
+      name,
+      email,
+      password,
+      phone,
+      authProvider: "local",
+    };
+
+    const nextStore = {
+      ...guestStore,
+      users: [...guestStore.users, user],
+    };
+
+    saveStore(nextStore, "guest");
+    setCurrentUser(user);
+    setAuthMode("local");
+    await cacheAuthUser(user);
     return user;
   };
 
-  const logout = () => {
-    const fresh = loadStore();
-    persist({ ...fresh, currentUserId: null });
+  const logout = async () => {
+    if (isSupabaseConfigured && supabase && authMode === "supabase") {
+      await supabase.auth.signOut();
+    }
+    await clearCachedAuthUser();
+    setCurrentUser(null);
   };
 
   const value = useMemo(
     () => ({
       currentUser,
       isAuthenticated: Boolean(currentUser),
+      authLoading,
+      authMode,
+      isSupabaseConfigured,
+      demoCredentials,
       login,
       signup,
       logout,
-      store,
     }),
-    [currentUser, store]
+    [currentUser, authLoading, authMode]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

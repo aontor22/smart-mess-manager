@@ -18,7 +18,8 @@
     "lucide-react": "^0.475.0",
     "recharts": "^2.15.0",
     "jspdf": "^2.5.2",
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "@supabase/supabase-js": "^2.49.1"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17",

@@ -1,124 +1,81 @@
--- Smart Mess Manager Supabase Schema
--- Run this in the Supabase SQL editor.
+-- Smart Mess Manager Supabase Sync Schema
+-- Run this file in Supabase Dashboard > SQL Editor.
+-- This version stores the local-first app state as a JSONB snapshot per authenticated user.
+-- It is designed for offline IndexedDB use plus automatic online sync.
 
-create table if not exists profiles (
-  id uuid primary key,
-  full_name text not null,
-  email text unique not null,
-  phone text,
-  created_at timestamptz default now()
-);
-
-create table if not exists messes (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  address text,
-  currency text default 'BDT',
-  month text not null,
-  monthly_rent numeric default 0,
-  service_charge numeric default 0,
-  manager_user_id uuid references profiles(id),
-  created_at timestamptz default now()
-);
-
-create table if not exists mess_members (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  user_id uuid references profiles(id),
-  name text not null,
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text,
   email text,
   phone text,
-  room_no text,
-  role text default 'member',
-  join_date date default current_date,
-  status text default 'active',
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
 
-create table if not exists meals (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  member_id uuid references mess_members(id) on delete cascade,
-  meal_date date not null,
-  breakfast numeric default 0,
-  lunch numeric default 0,
-  dinner numeric default 0,
-  note text,
-  created_at timestamptz default now()
+create table if not exists public.app_states (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  state jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
 );
 
-create table if not exists market_costs (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  buyer_member_id uuid references mess_members(id),
-  cost_date date not null,
-  amount numeric not null,
-  items text,
-  note text,
-  created_at timestamptz default now()
-);
+alter table public.profiles enable row level security;
+alter table public.app_states enable row level security;
 
-create table if not exists deposits (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  member_id uuid references mess_members(id) on delete cascade,
-  deposit_date date not null,
-  amount numeric not null,
-  payment_method text default 'Cash',
-  note text,
-  created_at timestamptz default now()
-);
+drop policy if exists "Users can view own profile" on public.profiles;
+drop policy if exists "Users can insert own profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
 
-create table if not exists expenses (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  expense_date date not null,
-  title text not null,
-  category text not null,
-  amount numeric not null,
-  split_type text default 'shared',
-  assigned_member_id uuid references mess_members(id),
-  note text,
-  created_at timestamptz default now()
-);
+create policy "Users can view own profile"
+on public.profiles for select
+to authenticated
+using (auth.uid() = id);
 
-create table if not exists activity_logs (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  actor_name text,
-  action text not null,
-  created_at timestamptz default now()
-);
+create policy "Users can insert own profile"
+on public.profiles for insert
+to authenticated
+with check (auth.uid() = id);
 
-create table if not exists notices (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete cascade,
-  sender_name text not null,
-  message text not null,
-  pinned boolean default false,
-  created_at timestamptz default now()
-);
+create policy "Users can update own profile"
+on public.profiles for update
+to authenticated
+using (auth.uid() = id)
+with check (auth.uid() = id);
 
-create table if not exists tolet_posts (
-  id uuid primary key default gen_random_uuid(),
-  mess_id uuid references messes(id) on delete set null,
-  title text not null,
-  location text not null,
-  rent numeric not null,
-  facilities text,
-  contact text not null,
-  available_from date,
-  image_url text,
-  created_at timestamptz default now()
-);
+drop policy if exists "Users can view own app state" on public.app_states;
+drop policy if exists "Users can insert own app state" on public.app_states;
+drop policy if exists "Users can update own app state" on public.app_states;
 
-alter table profiles enable row level security;
-alter table messes enable row level security;
-alter table mess_members enable row level security;
-alter table meals enable row level security;
-alter table market_costs enable row level security;
-alter table deposits enable row level security;
-alter table expenses enable row level security;
-alter table activity_logs enable row level security;
-alter table notices enable row level security;
-alter table tolet_posts enable row level security;
+create policy "Users can view own app state"
+on public.app_states for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert own app state"
+on public.app_states for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update own app state"
+on public.app_states for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists set_profiles_updated_at on public.profiles;
+create trigger set_profiles_updated_at
+before update on public.profiles
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_app_states_updated_at on public.app_states;
+create trigger set_app_states_updated_at
+before update on public.app_states
+for each row execute function public.set_updated_at();

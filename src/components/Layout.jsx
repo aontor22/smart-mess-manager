@@ -94,7 +94,7 @@ export default function Layout() {
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("smm-theme") === "dark");
   const { currentUser, logout } = useAuth();
-  const { activeMess } = useData();
+  const { activeMess, syncStatus, manualSync } = useData();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -127,6 +127,13 @@ export default function Layout() {
             <div className="flex items-center gap-2">
               <button className="btn-secondary px-3" onClick={() => setDark((value) => !value)}>
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={manualSync}
+                className="hidden rounded-xl px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950 md:block"
+                title="Click to sync now"
+              >
+                {syncStatus}
               </button>
               <NavLink to="/app/profile" className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900 md:block">
                 {currentUser?.name}
