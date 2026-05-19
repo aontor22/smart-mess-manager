@@ -1,0 +1,19 @@
+{
+  "name": "Smart Mess Manager",
+  "short_name": "Smart Mess",
+  "description": "Offline-ready mess, meal, expense, and monthly settlement manager.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

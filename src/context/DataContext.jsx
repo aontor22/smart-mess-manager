@@ -24,6 +24,7 @@ export function DataProvider({ children }) {
   const activeMess = store.messes.find((mess) => mess.id === store.activeMessId) || store.messes[0];
   const messId = activeMess?.id;
 
+  const users = store.users || [];
   const members = store.members.filter((member) => member.messId === messId);
   const meals = store.meals.filter((meal) => meal.messId === messId);
   const marketCosts = store.marketCosts.filter((item) => item.messId === messId);
@@ -39,6 +40,17 @@ export function DataProvider({ children }) {
 
   const currentMember = members.find((member) => member.userId === currentUser?.id);
   const isManager = currentMember?.role === "manager" || activeMess?.managerUserId === currentUser?.id;
+
+  const findRegisteredUserByEmail = (email) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return null;
+    return users.find((user) => String(user.email || "").trim().toLowerCase() === normalized) || null;
+  };
+
+  const isUserAlreadyMember = (userId, ignoreMemberId = null) => {
+    if (!userId) return false;
+    return members.some((member) => member.userId === userId && member.id !== ignoreMemberId);
+  };
 
   const log = (data, action) => {
     return {
@@ -122,6 +134,7 @@ export function DataProvider({ children }) {
   const value = useMemo(
     () => ({
       store,
+      users,
       activeMess,
       members,
       meals,
@@ -134,6 +147,8 @@ export function DataProvider({ children }) {
       currentMember,
       isManager,
       monthly,
+      findRegisteredUserByEmail,
+      isUserAlreadyMember,
       addRow,
       updateRow,
       deleteRow,

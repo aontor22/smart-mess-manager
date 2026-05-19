@@ -57,3 +57,37 @@ Balance = deposit − payable
 
 Positive balance means the member will get money back.  
 Negative balance means the member needs to pay.
+
+
+## Offline/PWA Support
+
+This project now includes offline support.
+
+Included files:
+- `public/sw.js`
+- `public/manifest.webmanifest`
+- `public/offline.html`
+- `public/pwa-icon.svg`
+- `src/utils/registerServiceWorker.js`
+
+How it works:
+- The app shell is cached after the first successful visit.
+- React/Vite build assets are cached automatically when loaded.
+- LocalStorage keeps mess data available in the same browser.
+- After one successful online load, the app can reopen offline.
+- For real multi-device sync, connect Supabase or Firebase later.
+
+Important:
+Service workers work properly on HTTPS domains like Vercel production URLs. They usually do not fully work from local `file://` paths.
+
+## Member Authentication Rule
+
+Random emails cannot be added as members anymore.
+
+Before adding a new member:
+1. The member must sign up first.
+2. The manager must add the member using the same registered email.
+3. If the email is not registered, the app blocks the member creation.
+
+This keeps member records linked with app authentication users in the LocalStorage demo system.
+
