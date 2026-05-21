@@ -95,8 +95,18 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="mx-auto max-w-7xl px-4 py-8 text-center text-sm text-slate-500">
-        Smart Mess Manager · Original project template
+      <footer className="border-t border-slate-800 bg-slate-950 px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-sm font-semibold text-white md:flex-row">
+          <p>
+            © 2026 Smart Mess Manager • Developed by{" "}
+            <span className="text-sky-400">Udoy Chowdhury</span>
+          </p>
+      
+          <div className="flex items-center gap-2 text-emerald-400">
+            <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span>All systems operational</span>
+          </div>
+        </div>
       </footer>
     </div>
   );
