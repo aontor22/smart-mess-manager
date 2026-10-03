@@ -31,6 +31,12 @@ function LoadingScreen() {
   );
 }
 
+function PublicOnly({ children }) {
+  const { isAuthenticated, authLoading } = useAuth();
+  if (authLoading) return <LoadingScreen />;
+  return isAuthenticated ? <Navigate to="/app" replace /> : children;
+}
+
 function Protected({ children }) {
   const { isAuthenticated, authLoading } = useAuth();
   if (authLoading) return <LoadingScreen />;
@@ -54,9 +60,30 @@ function SetupRoute() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route
+        path="/"
+        element={
+          <PublicOnly>
+            <Landing />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicOnly>
+            <Login />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <PublicOnly>
+            <Signup />
+          </PublicOnly>
+        }
+      />
       <Route
         path="/mess-setup"
         element={

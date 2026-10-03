@@ -26,6 +26,17 @@ const formatSupabaseUser = (supabaseUser) => ({
   authProvider: supabaseUser.app_metadata?.provider || "supabase",
 });
 
+// Do not await another Supabase request from inside onAuthStateChange.
+// Deferring the profile write avoids blocking the auth client's token/session work.
+const syncProfileLater = (user) => {
+  if (!user) return;
+  window.setTimeout(() => {
+    upsertProfile(user).catch((error) => {
+      console.warn("Deferred profile sync failed:", error?.message || error);
+    });
+  }, 0);
+};
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -35,48 +46,83 @@ export function AuthProvider({ children }) {
     let mounted = true;
     let subscription = null;
 
-    const applySessionUser = async (sessionUser) => {
+    const applySessionUser = (sessionUser, { syncProfile = false } = {}) => {
+      if (!sessionUser || !mounted) return null;
+
       const user = formatSupabaseUser(sessionUser);
-      if (!mounted) return;
       setCurrentUser(user);
       setAuthMode("supabase");
-      await cacheAuthUser(user);
-      await upsertProfile(user);
+
+      // Local cache is only an offline/UI fallback. Supabase remains the source
+      // of truth for the authenticated session.
+      cacheAuthUser(user).catch((error) => {
+        console.warn("Auth cache write failed:", error?.message || error);
+      });
+
+      if (syncProfile) syncProfileLater(user);
+      return user;
+    };
+
+    const clearLocalAuth = () => {
+      if (!mounted) return;
+      setCurrentUser(null);
+      clearCachedAuthUser().catch((error) => {
+        console.warn("Auth cache clear failed:", error?.message || error);
+      });
     };
 
     const initAuth = async () => {
       const cached = await getCachedAuthUser();
-      if (mounted && cached) setCurrentUser(cached);
+      if (!mounted) return;
 
+      // Register the listener before the initial lookup so token refreshes and
+      // OAuth callback events cannot slip through during app startup.
       if (isSupabaseConfigured && supabase) {
+        const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+          if (!mounted) return;
+
+          if (session?.user) {
+            applySessionUser(session.user, {
+              syncProfile: event === "SIGNED_IN" || event === "USER_UPDATED",
+            });
+          } else if (event === "SIGNED_OUT") {
+            clearLocalAuth();
+          }
+        });
+        subscription = listener?.subscription || null;
+
         const { data, error } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        if (!error && data?.session?.user) {
-          await applySessionUser(data.session.user);
-        } else if (!data?.session) {
-          setCurrentUser(null);
-          await clearCachedAuthUser();
+        if (data?.session?.user) {
+          applySessionUser(data.session.user, { syncProfile: true });
+        } else if (error) {
+          // A temporary network/refresh error should not destroy the local
+          // offline identity. The persisted Supabase tokens remain untouched
+          // and can refresh when connectivity is restored.
+          if (cached) {
+            setCurrentUser(cached);
+            setAuthMode("supabase");
+          }
+        } else {
+          clearLocalAuth();
         }
 
-        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-          if (session?.user) {
-            await applySessionUser(session.user);
-          } else if (mounted) {
-            setCurrentUser(null);
-            await clearCachedAuthUser();
-          }
-        });
-
-        subscription = listener?.subscription || null;
-        if (mounted) setAuthLoading(false);
+        setAuthLoading(false);
         return;
       }
 
-      if (mounted) setAuthLoading(false);
+      if (cached) {
+        setCurrentUser(cached);
+        setAuthMode("local");
+      }
+      setAuthLoading(false);
     };
 
-    initAuth();
+    initAuth().catch((error) => {
+      console.error("Auth initialization failed:", error);
+      if (mounted) setAuthLoading(false);
+    });
 
     return () => {
       mounted = false;
@@ -193,7 +239,8 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     if (isSupabaseConfigured && supabase && authMode === "supabase") {
-      await supabase.auth.signOut();
+      // Only sign out this browser session. Other devices stay signed in.
+      await supabase.auth.signOut({ scope: "local" });
     }
     await clearCachedAuthUser();
     setCurrentUser(null);
