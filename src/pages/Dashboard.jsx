@@ -1,4 +1,4 @@
-import { BarChart3, Receipt, Users, Utensils, WalletCards } from "lucide-react";
+import { AlertTriangle, BarChart3, Receipt, Users, Utensils, WalletCards } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
@@ -6,7 +6,7 @@ import { useData } from "../context/DataContext";
 import { money } from "../utils/calculations";
 
 export default function Dashboard() {
-  const { activeMess, members, monthly, activityLogs } = useData();
+  const { activeMess, members, monthly, activityLogs, currentMember, warningNotices } = useData();
   const currency = activeMess?.currency || "BDT";
 
   const chartData = monthly.memberRows.map((row) => ({
@@ -21,6 +21,18 @@ export default function Dashboard() {
         title="Dashboard"
         description="Your current month summary, member balance, and recent activity."
       />
+
+      {(currentMember?.mealStatus === "suspended" || warningNotices.length > 0) && (
+        <div className={`mb-5 flex items-start gap-3 rounded-2xl border p-4 ${currentMember?.mealStatus === "suspended" ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"}`}>
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-bold">{currentMember?.mealStatus === "suspended" ? "Your meal access is suspended" : "Payment warning"}</p>
+            <p className="mt-1 text-sm">
+              {warningNotices[0]?.message || "Please check your current balance and contact the manager."}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Members" value={members.filter((m) => m.status === "active").length} helper="Active members" icon={Users} />

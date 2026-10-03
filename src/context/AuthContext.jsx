@@ -22,7 +22,8 @@ const formatSupabaseUser = (supabaseUser) => ({
     "User",
   email: supabaseUser.email,
   phone: supabaseUser.user_metadata?.phone || "",
-  authProvider: "supabase",
+  avatarUrl: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || "",
+  authProvider: supabaseUser.app_metadata?.provider || "supabase",
 });
 
 export function AuthProvider({ children }) {
@@ -32,34 +33,44 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
+    let subscription = null;
+
+    const applySessionUser = async (sessionUser) => {
+      const user = formatSupabaseUser(sessionUser);
+      if (!mounted) return;
+      setCurrentUser(user);
+      setAuthMode("supabase");
+      await cacheAuthUser(user);
+      await upsertProfile(user);
+    };
 
     const initAuth = async () => {
       const cached = await getCachedAuthUser();
       if (mounted && cached) setCurrentUser(cached);
 
       if (isSupabaseConfigured && supabase) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session?.user && mounted) {
-          const user = formatSupabaseUser(data.session.user);
-          setCurrentUser(user);
-          setAuthMode("supabase");
-          await cacheAuthUser(user);
+        const { data, error } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        if (!error && data?.session?.user) {
+          await applySessionUser(data.session.user);
+        } else if (!data?.session) {
+          setCurrentUser(null);
+          await clearCachedAuthUser();
         }
 
         const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
           if (session?.user) {
-            const user = formatSupabaseUser(session.user);
-            setCurrentUser(user);
-            setAuthMode("supabase");
-            await cacheAuthUser(user);
-          } else {
+            await applySessionUser(session.user);
+          } else if (mounted) {
             setCurrentUser(null);
             await clearCachedAuthUser();
           }
         });
 
+        subscription = listener?.subscription || null;
         if (mounted) setAuthLoading(false);
-        return () => listener?.subscription?.unsubscribe?.();
+        return;
       }
 
       if (mounted) setAuthLoading(false);
@@ -69,6 +80,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       mounted = false;
+      subscription?.unsubscribe?.();
     };
   }, []);
 
@@ -105,6 +117,29 @@ export function AuthProvider({ children }) {
     return cleanUser;
   };
 
+  const loginWithGoogle = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured.");
+    }
+    if (!navigator.onLine) {
+      throw new Error("Internet connection is required for Google sign in.");
+    }
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/app`,
+        queryParams: {
+          access_type: "offline",
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  };
+
   const signup = async ({ name, email, password, phone }) => {
     if (isSupabaseConfigured && supabase && navigator.onLine) {
       const { data, error } = await supabase.auth.signUp({
@@ -122,11 +157,13 @@ export function AuthProvider({ children }) {
       if (!data?.user) throw new Error("Signup failed. Please try again.");
 
       const user = formatSupabaseUser(data.user);
-      setCurrentUser(user);
-      setAuthMode("supabase");
-      await cacheAuthUser(user);
-      await upsertProfile(user);
-      return user;
+      if (data.session) {
+        setCurrentUser(user);
+        setAuthMode("supabase");
+        await cacheAuthUser(user);
+        await upsertProfile(user);
+      }
+      return { user, hasSession: Boolean(data.session) };
     }
 
     const guestStore = loadStore("guest");
@@ -151,7 +188,7 @@ export function AuthProvider({ children }) {
     setCurrentUser(user);
     setAuthMode("local");
     await cacheAuthUser(user);
-    return user;
+    return { user, hasSession: true };
   };
 
   const logout = async () => {
@@ -171,6 +208,7 @@ export function AuthProvider({ children }) {
       isSupabaseConfigured,
       demoCredentials,
       login,
+      loginWithGoogle,
       signup,
       logout,
     }),
