@@ -94,3 +94,7 @@ If Supabase environment variables are not set, the app runs in local demo mode.
 Email: manager@demo.com
 Password: 123456
 ```
+
+## Profile update
+
+The responsive self-service profile update (monthly balance/history + name/phone editing) is documented in `PROFILE-UPDATE.md`. Existing Supabase deployments should run `database/profile-update.sql` once before using cloud profile editing.

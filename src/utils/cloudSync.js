@@ -63,6 +63,38 @@ export async function upsertProfile(user) {
   return { ok: true };
 }
 
+export async function updateOwnMessProfile(messId, { name, phone }) {
+  if (!canSync() || !messId) {
+    return { ok: false, error: new Error("Internet connection is required to update your mess profile.") };
+  }
+
+  const { data, error } = await supabase.rpc("update_own_mess_profile", {
+    p_mess_id: messId,
+    p_name: String(name || "").trim(),
+    p_phone: String(phone || "").trim(),
+  });
+
+  if (error) {
+    const missingRpc =
+      error.code === "PGRST202" ||
+      /update_own_mess_profile|function.*does not exist|schema cache/i.test(error.message || "");
+    const wrapped = new Error(
+      missingRpc
+        ? "Profile update SQL is not installed in Supabase yet. Run database/profile-update.sql once, then retry."
+        : error.message || "Could not update your mess profile."
+    );
+    wrapped.code = error.code;
+    wrapped.requiresProfileSql = missingRpc;
+    return { ok: false, error: wrapped };
+  }
+
+  return {
+    ok: true,
+    state: data?.state || null,
+    updatedAt: data?.updated_at || null,
+  };
+}
+
 export async function getCurrentMessMembership(userId) {
   if (!canSync() || !userId) return null;
 

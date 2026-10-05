@@ -10,6 +10,7 @@ import {
   saveStore,
 } from "../utils/storage";
 import { upsertProfile } from "../utils/cloudSync";
+import { normalizeEditableProfile } from "../utils/profile";
 
 const AuthContext = createContext(null);
 
@@ -237,6 +238,60 @@ export function AuthProvider({ children }) {
     return { user, hasSession: true };
   };
 
+  const updateAccountProfile = async ({ name, phone }) => {
+    if (!currentUser) throw new Error("Please login first.");
+
+    const clean = normalizeEditableProfile({ name, phone });
+    let nextUser = { ...currentUser, name: clean.name, phone: clean.phone };
+
+    if (isSupabaseConfigured && supabase && authMode === "supabase") {
+      if (!navigator.onLine) {
+        throw new Error("Internet connection is required to update your account profile.");
+      }
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          full_name: clean.name,
+          name: clean.name,
+          phone: clean.phone,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.user) nextUser = formatSupabaseUser(data.user);
+
+      // Keep the visible account identity current even if the secondary
+      // public.profiles write later needs a retry.
+      setCurrentUser(nextUser);
+      await cacheAuthUser(nextUser);
+
+      const profileResult = await upsertProfile(nextUser);
+      if (!profileResult?.ok) {
+        throw new Error(
+          profileResult?.error?.message ||
+            "Account metadata was updated, but the profile table could not be synced. Please retry."
+        );
+      }
+
+      return nextUser;
+    }
+
+    const guestStore = loadStore("guest");
+    const nextGuestStore = {
+      ...guestStore,
+      users: (guestStore.users || []).map((user) =>
+        user.id === currentUser.id ||
+        String(user.email || "").toLowerCase() === String(currentUser.email || "").toLowerCase()
+          ? { ...user, name: clean.name, phone: clean.phone }
+          : user
+      ),
+    };
+    saveStore(nextGuestStore, "guest");
+    setCurrentUser(nextUser);
+    await cacheAuthUser(nextUser);
+    return nextUser;
+  };
+
   const logout = async () => {
     if (isSupabaseConfigured && supabase && authMode === "supabase") {
       // Only sign out this browser session. Other devices stay signed in.
@@ -257,6 +312,7 @@ export function AuthProvider({ children }) {
       login,
       loginWithGoogle,
       signup,
+      updateAccountProfile,
       logout,
     }),
     [currentUser, authLoading, authMode]

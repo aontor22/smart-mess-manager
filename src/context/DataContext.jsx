@@ -5,6 +5,7 @@ import {
   loadStore,
   loadStoreAsync,
   makeId,
+  normalizeStore,
   saveStore,
   touchStore,
 } from "../utils/storage";
@@ -17,9 +18,11 @@ import {
   rotateMessJoinCode,
   syncLocalWithSupabase,
   transferMessManager,
+  updateOwnMessProfile,
 } from "../utils/cloudSync";
 import { applyWarningAutomation } from "../utils/warnings";
 import { buildMealBatch } from "../utils/mealBatch";
+import { normalizeEditableProfile, updateOwnProfileInStore } from "../utils/profile";
 
 const DataContext = createContext(null);
 
@@ -416,6 +419,75 @@ export function DataProvider({ children }) {
     persist(log(next, action));
   };
 
+  const updateOwnMemberProfile = async ({ name, phone }) => {
+    if (!currentUser?.id || !messId) throw new Error("Your mess membership is not available.");
+
+    const clean = normalizeEditableProfile({ name, phone });
+    const fresh = loadStore(ownerId, currentUser || undefined);
+
+    // Validate the linked member before any remote write. This also guarantees
+    // room, role, meal access and all financial collections remain untouched.
+    updateOwnProfileInStore(fresh, {
+      messId,
+      userId: currentUser.id,
+      name: clean.name,
+      phone: clean.phone,
+    });
+
+    if (currentUser && isSupabaseConfigured) {
+      if (!navigator.onLine) {
+        throw new Error("Internet connection is required to update your mess profile.");
+      }
+
+      setSyncStatus("syncing");
+      const result = await updateOwnMessProfile(messId, clean);
+      if (!result.ok) {
+        setSyncStatus("pending");
+        throw result.error || new Error("Could not update your mess profile.");
+      }
+
+      if (result.state) {
+        const syncedAt = result.updatedAt || new Date().toISOString();
+        const next = normalizeStore({
+          ...result.state,
+          ownerId,
+          currentUserId: currentUser.id,
+          syncMeta: {
+            ...(result.state.syncMeta || {}),
+            updatedAt: result.state.syncMeta?.updatedAt || syncedAt,
+            lastSyncedAt: syncedAt,
+            lastSyncSource: "supabase",
+            pendingSync: false,
+          },
+        });
+        saveStore(next, ownerId);
+        storeRef.current = next;
+        setStore(next);
+        window.dispatchEvent(new Event("smm-store-updated"));
+      } else {
+        // Defensive fallback: if an older PostgREST response omits state, pull
+        // the latest workspace so a local snapshot never overwrites newer data.
+        const refreshed = await syncLocalWithSupabase(storeRef.current, currentUser);
+        if (refreshed?.store) {
+          saveStore(refreshed.store, ownerId);
+          storeRef.current = refreshed.store;
+          setStore(refreshed.store);
+        }
+      }
+
+      setSyncStatus("synced");
+      return;
+    }
+
+    const next = updateOwnProfileInStore(fresh, {
+      messId,
+      userId: currentUser.id,
+      name: clean.name,
+      phone: clean.phone,
+    });
+    persist(log(next, "Updated own profile"));
+  };
+
   const updateMess = (patch) => {
     const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
@@ -597,6 +669,7 @@ export function DataProvider({ children }) {
       regenerateJoinCode,
       addRow,
       updateRow,
+      updateOwnMemberProfile,
       saveMealsForDate,
       deleteRow,
       updateMess,

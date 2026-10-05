@@ -12,6 +12,7 @@ import {
   Receipt,
   Settings,
   Sun,
+  UserRound,
   Users,
   Utensils,
   WalletCards,
@@ -32,6 +33,7 @@ const nav = [
   { to: "/app/notices", label: "Notices", icon: Bell },
   { to: "/app/tolet", label: "To-let", icon: Building2 },
   { to: "/app/activity", label: "Activity", icon: Activity },
+  { to: "/app/profile", label: "Profile", icon: UserRound },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];
 
@@ -43,19 +45,19 @@ function Sidebar({ open, setOpen }) {
         onClick={() => setOpen(false)}
       />
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen w-72 border-r border-slate-200 bg-white p-4 transition-transform dark:border-slate-800 dark:bg-slate-950 lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-40 h-dvh w-[88vw] max-w-72 overflow-y-auto border-r border-slate-200 bg-white p-4 pb-8 transition-transform dark:border-slate-800 dark:bg-slate-950 lg:h-screen lg:w-72 lg:max-w-none lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="mb-7 flex items-center justify-between">
-          <NavLink to="/app" className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-600 text-lg font-bold text-white">S</div>
-            <div>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">Smart Mess</p>
-              <p className="text-xs text-slate-500">Meal and cost manager</p>
+          <NavLink to="/app" className="flex min-w-0 items-center gap-3" onClick={() => setOpen(false)}>
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-600 text-lg font-bold text-white">S</div>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold text-slate-900 dark:text-white">Smart Mess</p>
+              <p className="truncate text-xs text-slate-500">Meal and cost manager</p>
             </div>
           </NavLink>
-          <button className="lg:hidden" onClick={() => setOpen(false)}>
+          <button className="shrink-0 lg:hidden" onClick={() => setOpen(false)} aria-label="Close navigation">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -77,8 +79,8 @@ function Sidebar({ open, setOpen }) {
                   }`
                 }
               >
-                <Icon className="h-4 w-4" />
-                {item.label}
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
               </NavLink>
             );
           })}
@@ -105,30 +107,33 @@ export default function Layout() {
     navigate("/login", { replace: true });
   };
 
+  const avatarLetter = currentUser?.name?.trim()?.charAt(0)?.toUpperCase() || "U";
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
       <Sidebar open={open} setOpen={setOpen} />
 
-      <main className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <button className="btn-secondary px-3 lg:hidden" onClick={() => setOpen(true)}>
+      <main className="min-w-0 lg:pl-72">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-4">
+          <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+              <button className="btn-secondary h-10 w-10 shrink-0 px-0 lg:hidden" onClick={() => setOpen(true)} aria-label="Open navigation">
                 <Menu className="h-4 w-4" />
               </button>
               <div className="min-w-0">
-                <h1 className="truncate text-base font-bold md:text-xl">{activeMess?.name || "Smart Mess Manager"}</h1>
-                <p className="truncate text-xs text-slate-500">
+                <h1 className="truncate text-sm font-bold sm:text-base md:text-xl">{activeMess?.name || "Smart Mess Manager"}</h1>
+                <p className="hidden truncate text-xs text-slate-500 sm:block">
                   {activeMess?.month} · {activeMess?.address || "No address set"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <NavLink
                 to="/app/notices"
                 className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                 title="Notifications"
+                aria-label="Notifications"
               >
                 <Bell className="h-4 w-4" />
                 {warningNotices.length > 0 && (
@@ -137,7 +142,12 @@ export default function Layout() {
                   </span>
                 )}
               </NavLink>
-              <button className="btn-secondary px-3" onClick={() => setDark((value) => !value)}>
+              <button
+                className="btn-secondary h-10 w-10 shrink-0 px-0"
+                onClick={() => setDark((value) => !value)}
+                title={dark ? "Use light theme" : "Use dark theme"}
+                aria-label={dark ? "Use light theme" : "Use dark theme"}
+              >
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
@@ -147,20 +157,29 @@ export default function Layout() {
               >
                 {syncStatus}
               </button>
-              <NavLink to="/app/profile" className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900 md:flex">
+              <NavLink
+                to="/app/profile"
+                className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-xl px-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900 sm:px-2"
+                title="Profile"
+                aria-label="Profile"
+              >
                 {currentUser?.avatarUrl ? (
-                  <img src={currentUser.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" referrerPolicy="no-referrer" />
-                ) : null}
-                {currentUser?.name}
+                  <img src={currentUser.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    {avatarLetter}
+                  </span>
+                )}
+                <span className="hidden max-w-36 truncate xl:inline">{currentUser?.name}</span>
               </NavLink>
-              <button className="btn-secondary px-3" onClick={handleLogout}>
+              <button className="btn-secondary h-10 w-10 shrink-0 px-0" onClick={handleLogout} title="Sign out" aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
               </button>
             </div>
           </div>
         </header>
 
-        <div className="mx-auto max-w-7xl p-4 pb-24 md:p-6">
+        <div className="mx-auto min-w-0 max-w-7xl p-3 pb-24 sm:p-4 md:p-6">
           <Outlet />
         </div>
 
@@ -173,13 +192,13 @@ export default function Layout() {
                 to={item.to}
                 end={item.to === "/app"}
                 className={({ isActive }) =>
-                  `flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] ${
+                  `flex min-w-0 flex-col items-center gap-1 rounded-xl py-2 text-[10px] sm:text-[11px] ${
                     isActive ? "text-emerald-600" : "text-slate-500"
                   }`
                 }
               >
                 <Icon className="h-4 w-4" />
-                {item.label}
+                <span className="max-w-full truncate">{item.label}</span>
               </NavLink>
             );
           })}
