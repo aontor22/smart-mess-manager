@@ -1,0 +1,27 @@
+.meal-scroll { width: 100%; max-width: 100%; overflow: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
+.meal-register-scroll { max-height: 65vh; }
+.meal-matrix { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; color: #334155; }
+.meal-matrix th, .meal-matrix td { min-width: 100px; padding: 10px 12px; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; text-align: center; }
+.meal-matrix th:last-child, .meal-matrix td:last-child { border-right: 0; }
+.meal-matrix thead th { position: sticky; top: 0; z-index: 3; background: #f1f5f9; font-weight: 600; }
+.meal-matrix .meal-member { min-width: 155px; max-width: 220px; overflow-wrap: anywhere; }
+.meal-matrix .meal-date { position: sticky; left: 0; min-width: 130px; width: 130px; background: #fff; z-index: 2; text-align: left; vertical-align: middle; }
+.meal-matrix .meal-label { position: sticky; left: var(--meal-date-width, 130px); min-width: 110px; width: 110px; background: #fff; z-index: 2; text-align: left; }
+.meal-matrix thead .meal-date, .meal-matrix thead .meal-label { z-index: 4; background: #f1f5f9; }
+.meal-matrix .meal-total td, .meal-matrix .meal-total th { background: #ecfdf5; font-weight: 600; color: #047857; }
+.meal-matrix .meal-day-start > * { border-top: 2px solid #cbd5e1; }
+.meal-matrix .meal-number { min-width: 85px; text-align: center; }
+.meal-matrix .input:disabled { opacity: .55; cursor: not-allowed; }
+form .meal-matrix .meal-label { left: 0; }
+.dark .meal-scroll, .dark .meal-matrix th, .dark .meal-matrix td { border-color: #334155; }
+.dark .meal-matrix { color: #e2e8f0; }
+.dark .meal-matrix .meal-date, .dark .meal-matrix .meal-label { background: #0f172a; }
+.dark .meal-matrix thead th, .dark .meal-matrix thead .meal-date, .dark .meal-matrix thead .meal-label { background: #1e293b; }
+.dark .meal-matrix .meal-total td, .dark .meal-matrix .meal-total th { background: #022c22; color: #6ee7b7; }
+@media (max-width: 640px) {
+  .meal-matrix { font-size: 12px; }
+  .meal-matrix th, .meal-matrix td { padding: 8px; }
+  .meal-matrix .meal-date { min-width: 105px; width: 105px; }
+  .meal-matrix .meal-label { left: var(--meal-date-width, 105px); min-width: 90px; width: 90px; }
+  form .meal-matrix .meal-label { left: 0; }
+}

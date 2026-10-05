@@ -19,6 +19,7 @@ import {
   transferMessManager,
 } from "../utils/cloudSync";
 import { applyWarningAutomation } from "../utils/warnings";
+import { buildMealBatch } from "../utils/mealBatch";
 
 const DataContext = createContext(null);
 
@@ -113,6 +114,7 @@ export function DataProvider({ children }) {
   const [workspaceStatus, setWorkspaceStatus] = useState("loading");
   const [membership, setMembership] = useState(null);
   const storeRef = useRef(store);
+  const syncQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
     storeRef.current = store;
@@ -250,6 +252,7 @@ export function DataProvider({ children }) {
     );
 
     saveStore(touched, ownerId);
+    storeRef.current = touched;
     setStore(touched);
     window.dispatchEvent(new Event("smm-store-updated"));
 
@@ -260,15 +263,23 @@ export function DataProvider({ children }) {
       workspaceStatus === "ready"
     ) {
       setSyncStatus("syncing");
-      pushStoreToSupabase(touched, currentUser).then((result) => {
+      // A meal batch can immediately trigger warning automation. Serialize
+      // those snapshots, and never let an older response undo newer edits.
+      syncQueueRef.current = syncQueueRef.current.catch(() => {}).then(async () => {
+        if (storeRef.current.ownerId !== ownerId) return;
+        const result = await pushStoreToSupabase(touched, currentUser);
+        if (storeRef.current !== touched) return;
         if (result.ok && result.store) {
           saveStore(result.store, ownerId);
+          storeRef.current = result.store;
           setStore(result.store);
           if (result.membership) setMembership(result.membership);
           setSyncStatus("synced");
         } else {
           setSyncStatus("pending");
         }
+      }).catch(() => {
+        if (storeRef.current === touched) setSyncStatus("pending");
       });
     } else {
       setSyncStatus(navigator.onLine ? "local-only" : "offline");
@@ -376,6 +387,24 @@ export function DataProvider({ children }) {
       [collection]: fresh[collection].map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
     };
     persist(log(next, action));
+  };
+
+  const saveMealsForDate = (mealDate, entries) => {
+    if (!isManager || workspaceStatus !== "ready") throw new Error("Only the current manager can save meals.");
+    const fresh = loadStore(ownerId, currentUser || undefined);
+    if (fresh.activeMessId !== messId) throw new Error("The active mess changed. Reload before saving.");
+    const result = buildMealBatch({
+      meals: fresh.meals,
+      members: fresh.members,
+      messId,
+      mealDate,
+      entries,
+      makeId,
+    });
+    if (result.changedCount) {
+      persist(log({ ...fresh, meals: result.meals }, `Saved meals for ${result.changedCount} member(s) on ${mealDate}`));
+    }
+    return result.changedCount;
   };
 
   const deleteRow = (collection, rowId, action) => {
@@ -568,6 +597,7 @@ export function DataProvider({ children }) {
       regenerateJoinCode,
       addRow,
       updateRow,
+      saveMealsForDate,
       deleteRow,
       updateMess,
       transferManager,
