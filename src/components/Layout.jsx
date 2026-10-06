@@ -24,7 +24,11 @@ import { useData } from "../context/DataContext";
 import {
   getPinnedNoticeTokens,
   getUnreadPinnedNoticeTokens,
+  getUnsoundedAutomaticAlerts,
+  isAutomaticAlertNotice,
+  markAutomaticAlertsSounded,
   markPinnedNoticesRead,
+  playAutomaticAlertSound,
   playNotificationSound,
   prepareNotificationSound,
 } from "../utils/notifications";
@@ -106,6 +110,35 @@ export default function Layout() {
   const [hasUnreadPinnedNotice, setHasUnreadPinnedNotice] = useState(false);
   const previousPinnedRef = useRef(new Set());
   const noticeScopeRef = useRef("");
+  const latestNoticeContextRef = useRef({ notices: [], userId: null, messId: null });
+  const automaticSoundInFlightRef = useRef(false);
+
+  latestNoticeContextRef.current = {
+    notices,
+    userId: currentUser?.id || null,
+    messId: activeMess?.id || null,
+  };
+
+  const flushPendingAutomaticAlertSound = async () => {
+    if (automaticSoundInFlightRef.current) return false;
+
+    const { notices: latestNotices, userId, messId } = latestNoticeContextRef.current;
+    if (!userId || !messId) return false;
+
+    const pending = getUnsoundedAutomaticAlerts(latestNotices, userId, messId);
+    if (pending.length === 0) return false;
+
+    // If payment warning and meal suspension arrive together, use the more urgent tune once.
+    const mostUrgent = pending.find((notice) => notice.type === "meal_suspended") || pending[0];
+    automaticSoundInFlightRef.current = true;
+    try {
+      const played = await playAutomaticAlertSound(mostUrgent.type);
+      if (played) markAutomaticAlertsSounded(pending, userId, messId);
+      return played;
+    } finally {
+      automaticSoundInFlightRef.current = false;
+    }
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -113,8 +146,9 @@ export default function Layout() {
   }, [dark]);
 
   useEffect(() => {
-    const armSound = () => {
-      prepareNotificationSound().catch(() => {});
+    const armSound = async () => {
+      const ready = await prepareNotificationSound().catch(() => false);
+      if (ready) flushPendingAutomaticAlertSound().catch(() => {});
     };
     window.addEventListener("pointerdown", armSound, { once: true, capture: true });
     window.addEventListener("keydown", armSound, { once: true, capture: true });
@@ -142,11 +176,17 @@ export default function Layout() {
       noticeScopeRef.current = scope;
       previousPinnedRef.current = currentSet;
     } else {
-      const newlyPinned = currentTokens.filter((token) => !previousPinnedRef.current.has(token));
-      if (newlyPinned.length > 0) playNotificationSound().catch(() => {});
+      const newlyPinnedGeneral = notices.filter((notice) => {
+        const token = notice?.pinned ? `${notice.id}:${notice.pinnedAt || notice.createdAt || "pinned"}` : null;
+        return token && !previousPinnedRef.current.has(token) && !isAutomaticAlertNotice(notice);
+      });
+      if (newlyPinnedGeneral.length > 0) playNotificationSound().catch(() => {});
       previousPinnedRef.current = currentSet;
     }
 
+    // Automatic payment warnings and meal-off events have their own persistent
+    // alert tunes. If autoplay is still locked, the first user interaction flushes them.
+    flushPendingAutomaticAlertSound().catch(() => {});
     setHasUnreadPinnedNotice(getUnreadPinnedNoticeTokens(notices, userId, messId).length > 0);
   }, [notices, currentUser?.id, activeMess?.id]);
 

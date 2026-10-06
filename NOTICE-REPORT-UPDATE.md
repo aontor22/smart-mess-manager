@@ -31,3 +31,12 @@ git add -A
 git commit -m "Add pinned notice alerts and improve report printing"
 git push
 ```
+
+## Automatic warning / meal-off sound update
+
+- Automatic `payment_warning` notices now use a dedicated three-note warning tune.
+- Automatic `meal_suspended` notices now use a more urgent four-note meal-off tune.
+- Automatic alerts are tracked separately from the normal pinned-notice sound, so the same event does not play both tunes.
+- A warning tune is played once per generated warning event on each signed-in browser. It is not replayed on every render or page refresh.
+- If browser autoplay is locked, the alert remains pending and plays after the user's first normal click/tap/key interaction.
+- No new Supabase SQL or schema change is required.
