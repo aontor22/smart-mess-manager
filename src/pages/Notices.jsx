@@ -14,12 +14,14 @@ export default function Notices() {
 
   const save = (e) => {
     e.preventDefault();
+    const now = new Date().toISOString();
     addRow(
       "notices",
       {
         ...form,
         senderName: currentUser?.name || "Member",
-        createdAt: new Date().toISOString(),
+        createdAt: now,
+        pinnedAt: form.pinned ? now : null,
         type: "general",
         targetUserId: null,
         targetMemberId: null,
@@ -75,7 +77,16 @@ export default function Notices() {
                 <div className="mt-4 flex gap-2">
                   <button
                     className="btn-secondary"
-                    onClick={() => updateRow("notices", notice.id, { pinned: !notice.pinned }, notice.pinned ? "Unpinned a notice" : "Pinned a notice")}
+                    onClick={() =>
+                      updateRow(
+                        "notices",
+                        notice.id,
+                        notice.pinned
+                          ? { pinned: false }
+                          : { pinned: true, pinnedAt: new Date().toISOString() },
+                        notice.pinned ? "Unpinned a notice" : "Pinned a notice"
+                      )
+                    }
                   >
                     {notice.pinned ? "Unpin" : "Pin"}
                   </button>

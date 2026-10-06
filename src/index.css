@@ -49,3 +49,306 @@ body {
     @apply border-b border-slate-100 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200;
   }
 }
+
+/* Monthly report: table-first layout on screen and clean A4 landscape print output. */
+.report-sheet {
+  @apply mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft dark:border-slate-800 dark:bg-slate-900;
+}
+
+.report-print-heading {
+  @apply flex flex-col gap-3 border-b border-slate-200 px-4 py-5 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between sm:px-5;
+}
+
+.report-print-heading h1 {
+  @apply text-xl font-bold text-slate-900 dark:text-white sm:text-2xl;
+}
+
+.report-print-heading p:not(.report-print-kicker) {
+  @apply mt-1 text-sm text-slate-500;
+}
+
+.report-print-kicker {
+  @apply mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600;
+}
+
+.report-print-period {
+  @apply flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800 sm:block sm:min-w-40 sm:text-right;
+}
+
+.report-print-period span {
+  @apply block text-xs font-medium uppercase tracking-wide text-slate-500;
+}
+
+.report-print-period strong {
+  @apply mt-1 block text-base text-slate-900 dark:text-white;
+}
+
+.report-summary-wrap {
+  @apply overflow-x-auto border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5;
+}
+
+.report-summary-table {
+  @apply w-full min-w-[620px] border-separate border-spacing-0 overflow-hidden rounded-xl border border-slate-200 text-sm dark:border-slate-700;
+}
+
+.report-summary-table th,
+.report-summary-table td {
+  @apply border-b border-r border-slate-200 px-3 py-3 text-left last:border-r-0 dark:border-slate-700;
+}
+
+.report-summary-table tr:last-child th,
+.report-summary-table tr:last-child td {
+  @apply border-b-0;
+}
+
+.report-summary-table th {
+  @apply bg-slate-50 font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400;
+}
+
+.report-summary-table td {
+  @apply font-bold text-slate-900 dark:text-white;
+}
+
+.report-table-wrap {
+  @apply overflow-x-auto;
+}
+
+.report-settlement-table {
+  @apply w-full min-w-[1180px] border-collapse;
+}
+
+.report-settlement-table thead th {
+  @apply border-b border-slate-200 bg-slate-50 px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400;
+}
+
+.report-settlement-table tbody td {
+  @apply border-b border-slate-100 px-3 py-3 text-sm text-slate-700 last:pr-4 dark:border-slate-800 dark:text-slate-200;
+}
+
+.report-settlement-table tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.report-settlement-table tbody tr:hover td {
+  @apply bg-slate-50/70 dark:bg-slate-800/40;
+}
+
+.report-member-name,
+.report-payable {
+  @apply font-bold text-slate-900 dark:text-white;
+}
+
+.report-positive {
+  @apply font-bold text-emerald-600 dark:text-emerald-400;
+}
+
+.report-negative {
+  @apply font-bold text-red-600 dark:text-red-400;
+}
+
+.report-status {
+  @apply inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
+}
+
+.report-status.is-positive {
+  @apply bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300;
+}
+
+.report-status.is-negative {
+  @apply bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300;
+}
+
+.report-empty {
+  @apply py-10 text-center text-sm text-slate-500;
+}
+
+.report-print-footer {
+  @apply flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:justify-between sm:px-5;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 9mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #0f172a !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #monthly-report-print,
+  #monthly-report-print * {
+    visibility: visible !important;
+  }
+
+  #monthly-report-print {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #0f172a !important;
+  }
+
+  [data-print-hide="true"] {
+    display: none !important;
+  }
+
+  .report-print-heading {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-end !important;
+    justify-content: space-between !important;
+    padding: 0 0 6mm !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+
+  .report-print-heading h1 {
+    margin: 0 !important;
+    font-size: 18pt !important;
+    color: #0f172a !important;
+  }
+
+  .report-print-heading p:not(.report-print-kicker) {
+    margin: 1mm 0 0 !important;
+    font-size: 8.5pt !important;
+    color: #475569 !important;
+  }
+
+  .report-print-kicker {
+    margin: 0 0 1mm !important;
+    font-size: 7pt !important;
+    color: #047857 !important;
+  }
+
+  .report-print-period {
+    display: block !important;
+    min-width: 38mm !important;
+    padding: 3mm 4mm !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 3mm !important;
+    background: #f8fafc !important;
+    text-align: right !important;
+  }
+
+  .report-print-period span {
+    display: block !important;
+    font-size: 7pt !important;
+    color: #64748b !important;
+  }
+
+  .report-print-period strong {
+    display: block !important;
+    margin-top: 1mm !important;
+    font-size: 10pt !important;
+    color: #0f172a !important;
+  }
+
+  .report-summary-wrap {
+    overflow: visible !important;
+    padding: 5mm 0 !important;
+    border-bottom: 0 !important;
+  }
+
+  .report-summary-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    border: 1px solid #94a3b8 !important;
+    border-collapse: collapse !important;
+    border-radius: 0 !important;
+    font-size: 7.5pt !important;
+  }
+
+  .report-summary-table th,
+  .report-summary-table td {
+    padding: 2.2mm 2.5mm !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+
+  .report-summary-table th {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+  }
+
+  .report-table-wrap {
+    overflow: visible !important;
+  }
+
+  .report-settlement-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  .report-settlement-table thead {
+    display: table-header-group !important;
+  }
+
+  .report-settlement-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .report-settlement-table thead th {
+    padding: 2.1mm 1.5mm !important;
+    border: 1px solid #94a3b8 !important;
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    font-size: 6.6pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .report-settlement-table tbody td {
+    padding: 2mm 1.5mm !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #fff !important;
+    color: #0f172a !important;
+    font-size: 6.8pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .report-positive {
+    color: #047857 !important;
+  }
+
+  .report-negative {
+    color: #b91c1c !important;
+  }
+
+  .report-status {
+    display: inline !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    font-size: 6.6pt !important;
+    color: #334155 !important;
+    white-space: normal !important;
+  }
+
+  .report-print-footer {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    gap: 5mm !important;
+    margin-top: 4mm !important;
+    padding: 3mm 0 0 !important;
+    border-top: 1px solid #cbd5e1 !important;
+    background: #fff !important;
+    color: #64748b !important;
+    font-size: 6.8pt !important;
+  }
+}

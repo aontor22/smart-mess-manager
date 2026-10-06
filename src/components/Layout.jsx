@@ -18,9 +18,16 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
+import {
+  getPinnedNoticeTokens,
+  getUnreadPinnedNoticeTokens,
+  markPinnedNoticesRead,
+  playNotificationSound,
+  prepareNotificationSound,
+} from "../utils/notifications";
 
 const nav = [
   { to: "/app", label: "Dashboard", icon: Home },
@@ -94,17 +101,65 @@ export default function Layout() {
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("smm-theme") === "dark");
   const { currentUser, logout } = useAuth();
-  const { activeMess, syncStatus, manualSync, warningNotices } = useData();
+  const { activeMess, syncStatus, manualSync, warningNotices, notices } = useData();
   const navigate = useNavigate();
+  const [hasUnreadPinnedNotice, setHasUnreadPinnedNotice] = useState(false);
+  const previousPinnedRef = useRef(new Set());
+  const noticeScopeRef = useRef("");
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("smm-theme", dark ? "dark" : "light");
   }, [dark]);
 
+  useEffect(() => {
+    const armSound = () => {
+      prepareNotificationSound().catch(() => {});
+    };
+    window.addEventListener("pointerdown", armSound, { once: true, capture: true });
+    window.addEventListener("keydown", armSound, { once: true, capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", armSound, true);
+      window.removeEventListener("keydown", armSound, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    const userId = currentUser?.id;
+    const messId = activeMess?.id;
+    if (!userId || !messId) {
+      setHasUnreadPinnedNotice(false);
+      previousPinnedRef.current = new Set();
+      noticeScopeRef.current = "";
+      return;
+    }
+
+    const scope = `${userId}:${messId}`;
+    const currentTokens = getPinnedNoticeTokens(notices);
+    const currentSet = new Set(currentTokens);
+
+    if (noticeScopeRef.current !== scope) {
+      noticeScopeRef.current = scope;
+      previousPinnedRef.current = currentSet;
+    } else {
+      const newlyPinned = currentTokens.filter((token) => !previousPinnedRef.current.has(token));
+      if (newlyPinned.length > 0) playNotificationSound().catch(() => {});
+      previousPinnedRef.current = currentSet;
+    }
+
+    setHasUnreadPinnedNotice(getUnreadPinnedNoticeTokens(notices, userId, messId).length > 0);
+  }, [notices, currentUser?.id, activeMess?.id]);
+
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
+  };
+
+  const handleNoticeBellClick = () => {
+    if (currentUser?.id && activeMess?.id) {
+      markPinnedNoticesRead(notices, currentUser.id, activeMess.id);
+      setHasUnreadPinnedNotice(false);
+    }
   };
 
   const avatarLetter = currentUser?.name?.trim()?.charAt(0)?.toUpperCase() || "U";
@@ -131,15 +186,23 @@ export default function Layout() {
             <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <NavLink
                 to="/app/notices"
+                onClick={handleNoticeBellClick}
                 className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                 title="Notifications"
-                aria-label="Notifications"
+                aria-label={hasUnreadPinnedNotice ? "Notifications, new pinned notice" : "Notifications"}
               >
                 <Bell className="h-4 w-4" />
                 {warningNotices.length > 0 && (
                   <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                     {warningNotices.length > 9 ? "9+" : warningNotices.length}
                   </span>
+                )}
+                {hasUnreadPinnedNotice && (
+                  <span
+                    className="absolute bottom-1 right-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm dark:border-slate-900"
+                    title="New pinned notice"
+                    aria-hidden="true"
+                  />
                 )}
               </NavLink>
               <button
