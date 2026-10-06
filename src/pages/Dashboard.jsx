@@ -78,10 +78,43 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <div className="card">
+      <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-2">
+        <div className="card min-w-0 overflow-hidden">
           <h3 className="mb-4 text-lg font-bold">Final settlement preview</h3>
-          <div className="overflow-x-auto">
+
+          {/* Mobile: show every settlement field without forcing a wide table off-screen. */}
+          <div className="space-y-3 sm:hidden">
+            {monthly.memberRows.map((row) => (
+              <div
+                key={row.memberId}
+                className="min-w-0 rounded-2xl border border-slate-100 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-800/70"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <p className="min-w-0 break-words text-sm font-bold text-slate-900 dark:text-white">{row.name}</p>
+                  <span className={`shrink-0 text-sm font-bold ${row.balance >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {money(row.balance, currency)}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="text-slate-500">Meals</p>
+                    <p className="mt-1 break-words font-semibold text-slate-800 dark:text-slate-100">{row.meals}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-slate-500">Payable</p>
+                    <p className="mt-1 break-words font-semibold text-slate-800 dark:text-slate-100">{money(row.payable, currency)}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-slate-500">Deposit</p>
+                    <p className="mt-1 break-words font-semibold text-slate-800 dark:text-slate-100">{money(row.deposit, currency)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tablet/desktop: keep the familiar full settlement table. */}
+          <div className="hidden max-w-full overflow-x-auto sm:block">
             <table className="w-full min-w-[650px]">
               <thead className="table-head">
                 <tr>
@@ -109,13 +142,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card">
+        <div className="card min-w-0 overflow-hidden">
           <h3 className="mb-4 text-lg font-bold">Recent activity</h3>
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             {activityLogs.slice(0, 6).map((item) => (
-              <div key={item.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800">
-                <p className="text-sm font-medium">{item.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()} by {item.actorName}</p>
+              <div key={item.id} className="min-w-0 rounded-2xl bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="break-words text-sm font-medium">{item.action}</p>
+                <p className="mt-1 break-words text-xs leading-5 text-slate-500">
+                  {new Date(item.createdAt).toLocaleString()} by {item.actorName}
+                </p>
               </div>
             ))}
           </div>
