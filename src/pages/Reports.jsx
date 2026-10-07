@@ -1,14 +1,57 @@
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { useData } from "../context/DataContext";
-import { money } from "../utils/calculations";
+import { calculateMonthly, money } from "../utils/calculations";
 import { downloadCSV, downloadReportPDF } from "../utils/export";
+import { collectAvailableMonths } from "../utils/profile";
 
 const compactMoney = (value, currency) => money(value, currency);
+const formatMonth = (month) => {
+  if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return month || "";
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+};
 
 export default function Reports() {
-  const { activeMess, monthly } = useData();
+  const { activeMess, members, meals, marketCosts, deposits, expenses } = useData();
   const currency = activeMess?.currency || "BDT";
   const reportTitle = activeMess?.name || "Smart Mess";
+  const availableMonths = useMemo(
+    () => collectAvailableMonths({ activeMess, meals, deposits, marketCosts, expenses }),
+    [activeMess, meals, deposits, marketCosts, expenses]
+  );
+  const [selectedMonth, setSelectedMonth] = useState(activeMess?.month || availableMonths[0] || "");
+
+  useEffect(() => {
+    if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(activeMess?.month || availableMonths[0] || "");
+    }
+  }, [activeMess?.month, availableMonths, selectedMonth]);
+
+  const monthly = useMemo(
+    () => activeMess
+      ? calculateMonthly({
+          mess: { ...activeMess, month: selectedMonth || activeMess.month },
+          members,
+          meals,
+          marketCosts,
+          deposits,
+          expenses,
+        })
+      : {
+          month: selectedMonth,
+          activeMembers: [],
+          totalMeals: 0,
+          totalMarketCost: 0,
+          totalDeposits: 0,
+          totalExpenses: 0,
+          mealRate: 0,
+          sharedTotal: 0,
+          sharedPerMember: 0,
+          memberRows: [],
+        },
+    [activeMess, selectedMonth, members, meals, marketCosts, deposits, expenses]
+  );
 
   const csvRows = monthly.memberRows.map((row) => ({
     Member: row.name,
@@ -27,7 +70,7 @@ export default function Reports() {
     ["Total meals", monthly.totalMeals, "Meal rate", compactMoney(monthly.mealRate, currency)],
     ["Market cost", compactMoney(monthly.totalMarketCost, currency), "Total deposits", compactMoney(monthly.totalDeposits, currency)],
     ["Shared expenses", compactMoney(monthly.sharedTotal, currency), "Shared extra/member", compactMoney(monthly.sharedPerMember, currency)],
-    ["Total extra expenses", compactMoney(monthly.totalExpenses, currency), "Active members", monthly.activeMembers.length],
+    ["Total extra expenses", compactMoney(monthly.totalExpenses, currency), "Settlement members", monthly.activeMembers.length],
   ];
 
   return (
@@ -35,11 +78,17 @@ export default function Reports() {
       <div data-print-hide="true">
         <PageHeader
           title="Monthly report"
-          description="View, print, export, and download the final monthly settlement."
+          description="View previous months, print, export, and download the final monthly settlement."
           action={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-wrap items-end justify-end gap-2 sm:w-auto">
+              <div className="min-w-[180px] flex-1 sm:flex-none">
+                <label className="label" htmlFor="report-month">Report month</label>
+                <select id="report-month" className="input" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
+                  {availableMonths.map((month) => <option key={month} value={month}>{formatMonth(month)}</option>)}
+                </select>
+              </div>
               <button className="btn-secondary" onClick={() => window.print()}>Print</button>
-              <button className="btn-secondary" onClick={() => downloadCSV("monthly-report.csv", csvRows)}>Export CSV</button>
+              <button className="btn-secondary" onClick={() => downloadCSV(`monthly-report-${monthly.month}.csv`, csvRows)}>Export CSV</button>
               <button
                 className="btn-primary"
                 onClick={() =>
@@ -67,7 +116,7 @@ export default function Reports() {
           </div>
           <div className="report-print-period">
             <span>Monthly report</span>
-            <strong>{monthly.month}</strong>
+            <strong>{formatMonth(monthly.month)}</strong>
           </div>
         </div>
 
@@ -106,7 +155,7 @@ export default function Reports() {
             <tbody>
               {monthly.memberRows.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="report-empty">No active member settlement is available for this month.</td>
+                  <td colSpan="11" className="report-empty">No settlement data is available for this month.</td>
                 </tr>
               ) : (
                 monthly.memberRows.map((row, index) => (

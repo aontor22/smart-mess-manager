@@ -19,6 +19,7 @@ import ToletBoard from "./pages/ToletBoard";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import AppUpdatePrompt from "./components/AppUpdatePrompt";
 
 function LoadingScreen() {
   return (
@@ -59,7 +60,9 @@ function SetupRoute() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <AppUpdatePrompt />
+      <Routes>
       <Route
         path="/"
         element={
@@ -118,6 +121,7 @@ export default function App() {
       </Route>
 
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

@@ -73,6 +73,7 @@ export default function Members() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
 
+  const visibleMembers = members.filter((member) => !member.archived);
   const balanceByMember = new Map(monthly.memberRows.map((row) => [row.memberId, row.balance]));
 
   const save = (e) => {
@@ -114,7 +115,7 @@ export default function Members() {
       <RoleNotice />
 
       <div className="card overflow-hidden p-0 sm:p-0">
-        {members.length === 0 ? <div className="p-5"><EmptyState /></div> : (
+        {visibleMembers.length === 0 ? <div className="p-5"><EmptyState /></div> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1260px]">
               <thead className="table-head">
@@ -133,7 +134,7 @@ export default function Members() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => {
+                {visibleMembers.map((member) => {
                   const balance = Number(balanceByMember.get(member.id) || 0);
                   const alertState = getMemberAlertState(member);
                   return (

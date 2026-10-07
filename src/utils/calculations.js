@@ -11,11 +11,22 @@ export const filterByMonth = (rows, dateField, month) =>
 
 export function calculateMonthly({ mess, members, meals, marketCosts, deposits, expenses }) {
   const month = mess?.month || new Date().toISOString().slice(0, 7);
-  const activeMembers = members.filter((m) => m.status === "active");
   const monthMeals = filterByMonth(meals, "mealDate", month);
   const monthMarket = filterByMonth(marketCosts, "costDate", month);
   const monthDeposits = filterByMonth(deposits, "depositDate", month);
   const monthExpenses = filterByMonth(expenses, "expenseDate", month);
+
+  // Historical reports must retain members who had transactions in that month
+  // even if they are inactive/archived today. Current active members remain part
+  // of the settlement exactly as before.
+  const monthMemberIds = new Set([
+    ...monthMeals.map((row) => row.memberId),
+    ...monthDeposits.map((row) => row.memberId),
+    ...monthExpenses.map((row) => row.assignedMemberId).filter(Boolean),
+  ]);
+  const activeMembers = members.filter(
+    (member) => member.status === "active" || monthMemberIds.has(member.id)
+  );
 
   const totalMeals = monthMeals.reduce((sum, meal) => sum + mealTotal(meal), 0);
   const totalMarketCost = monthMarket.reduce((sum, item) => sum + Number(item.amount || 0), 0);
