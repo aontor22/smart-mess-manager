@@ -2,6 +2,7 @@
 
 This update is additive and keeps the existing meal, deposit, expense, member, authentication, sync, and settlement logic unchanged.
 
+
 ## Notice notification
 
 - A newly pinned notice creates a small green unread dot on the top notification bell.
