@@ -1,23 +1,38 @@
-import { Check, Copy, RefreshCw, ShieldAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  BellRing,
+  Check,
+  Clock3,
+  Copy,
+  RefreshCw,
+  Save,
+  ShieldAlert,
+  Utensils,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { useData } from "../context/DataContext";
+import { normalizeWarningSettings } from "../utils/warnings";
 
-const withDefaults = (mess) => ({
+const messDefaults = (mess) => ({
   name: mess?.name || "",
   month: mess?.month || new Date().toISOString().slice(0, 7),
   currency: mess?.currency || "BDT",
   monthlyRent: mess?.monthlyRent || 0,
   serviceCharge: mess?.serviceCharge || 0,
   address: mess?.address || "",
-  warningSettings: {
-    enabled: mess?.warningSettings?.enabled ?? true,
-    warningAfterDays: mess?.warningSettings?.warningAfterDays ?? 4,
-    mealOffAfterDays: mess?.warningSettings?.mealOffAfterDays ?? 7,
-    minimumDue: mess?.warningSettings?.minimumDue ?? 1,
-    autoSuspendMeals: mess?.warningSettings?.autoSuspendMeals ?? true,
-  },
 });
+
+const warningDefaults = (mess) => {
+  const normalized = normalizeWarningSettings(mess?.warningSettings || {});
+  return {
+    enabled: normalized.enabled,
+    warningAfterDays: normalized.warningAfterDays,
+    mealOffAfterDays: normalized.mealOffAfterDays,
+    minimumDue: normalized.minimumDue,
+    autoSuspendMeals: normalized.autoSuspendMeals,
+  };
+};
 
 export default function Settings() {
   const {
@@ -29,41 +44,99 @@ export default function Settings() {
     resetDemoData,
     isManager,
   } = useData();
-  const [form, setForm] = useState(() => withDefaults(activeMess));
+  const [messForm, setMessForm] = useState(() => messDefaults(activeMess));
+  const [warningForm, setWarningForm] = useState(() => warningDefaults(activeMess));
   const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setForm(withDefaults(activeMess));
-  }, [activeMess]);
+    setMessForm(messDefaults(activeMess));
+  }, [
+    activeMess?.id,
+    activeMess?.name,
+    activeMess?.month,
+    activeMess?.currency,
+    activeMess?.monthlyRent,
+    activeMess?.serviceCharge,
+    activeMess?.address,
+  ]);
+
+  useEffect(() => {
+    setWarningForm(warningDefaults(activeMess));
+  }, [
+    activeMess?.id,
+    activeMess?.warningSettings?.enabled,
+    activeMess?.warningSettings?.warningAfterDays,
+    activeMess?.warningSettings?.mealOffAfterDays,
+    activeMess?.warningSettings?.minimumDue,
+    activeMess?.warningSettings?.autoSuspendMeals,
+  ]);
+
+  const warningValidation = useMemo(() => {
+    const warningDay = Number(warningForm.warningAfterDays);
+    const mealOffDay = Number(warningForm.mealOffAfterDays);
+    const minimumDue = Number(warningForm.minimumDue);
+
+    if (!Number.isInteger(warningDay) || warningDay < 1) {
+      return "Warning day must be a whole number starting from Day 1.";
+    }
+    if (!Number.isInteger(mealOffDay) || mealOffDay <= warningDay) {
+      return `Meal off day must be later than warning day (Day ${warningDay + 1} or later).`;
+    }
+    if (!Number.isFinite(minimumDue) || minimumDue < 0) {
+      return "Minimum due cannot be negative.";
+    }
+    return "";
+  }, [warningForm.warningAfterDays, warningForm.mealOffAfterDays, warningForm.minimumDue]);
 
   if (!activeMess) return null;
 
-  const save = (e) => {
-    e.preventDefault();
+  const clearFeedback = () => {
     setMessage("");
     setError("");
+  };
 
-    const warningAfterDays = Math.max(0, Number(form.warningSettings.warningAfterDays || 0));
-    const mealOffAfterDays = Math.max(
-      warningAfterDays,
-      Number(form.warningSettings.mealOffAfterDays || warningAfterDays)
-    );
+  const saveMessSettings = (event) => {
+    event.preventDefault();
+    clearFeedback();
 
     updateMess({
-      ...form,
-      monthlyRent: Number(form.monthlyRent || 0),
-      serviceCharge: Number(form.serviceCharge || 0),
-      warningSettings: {
-        ...form.warningSettings,
-        warningAfterDays,
-        mealOffAfterDays,
-        minimumDue: Math.max(0, Number(form.warningSettings.minimumDue || 0)),
-      },
+      ...messForm,
+      monthlyRent: Math.max(0, Number(messForm.monthlyRent || 0)),
+      serviceCharge: Math.max(0, Number(messForm.serviceCharge || 0)),
     });
-    setMessage("Settings saved.");
+    setMessage("Mess settings saved.");
+  };
+
+  const saveWarningSettings = (event) => {
+    event.preventDefault();
+    clearFeedback();
+
+    if (warningValidation) {
+      setError(warningValidation);
+      return;
+    }
+
+    const normalized = normalizeWarningSettings(warningForm);
+    setWarningForm(normalized);
+    updateMess({ warningSettings: normalized });
+    setMessage(
+      `Automation saved: first warning on Day ${normalized.warningAfterDays}, meal off on Day ${normalized.mealOffAfterDays}.`
+    );
+  };
+
+  const setWarningDay = (value) => {
+    setWarningForm((previous) => {
+      const next = { ...previous, warningAfterDays: value };
+      const warningDay = Number(value);
+      const mealOffDay = Number(previous.mealOffAfterDays);
+      if (Number.isInteger(warningDay) && warningDay >= 1 && Number.isFinite(mealOffDay) && mealOffDay <= warningDay) {
+        next.mealOffAfterDays = warningDay + 1;
+      }
+      return next;
+    });
   };
 
   const copyMessId = async () => {
@@ -79,8 +152,7 @@ export default function Settings() {
   const regenerate = async () => {
     if (!window.confirm("Generate a new Mess ID? The old ID will stop working immediately.")) return;
     setBusy(true);
-    setError("");
-    setMessage("");
+    clearFeedback();
     try {
       await regenerateJoinCode();
       setMessage("A new Mess ID was generated. Share only the new ID with members.");
@@ -94,8 +166,7 @@ export default function Settings() {
   const makeManager = async (memberId) => {
     if (!window.confirm("Transfer manager access to this member? You will become a regular member.")) return;
     setBusy(true);
-    setError("");
-    setMessage("");
+    clearFeedback();
     try {
       await transferManager(memberId);
       setMessage("Manager role transferred successfully.");
@@ -106,12 +177,24 @@ export default function Settings() {
     }
   };
 
+  const warningDay = Math.max(1, Number(warningForm.warningAfterDays) || 1);
+  const mealOffDay = Math.max(warningDay + 1, Number(warningForm.mealOffAfterDays) || warningDay + 1);
+
   return (
     <div>
-      <PageHeader title="Settings" description="Manage mess profile, secure Mess ID, payment warnings, and manager access." />
+      <PageHeader
+        title="Settings"
+        description="Manage mess profile, secure Mess ID, payment warnings, and manager access."
+      />
 
       {(message || error) && (
-        <div className={`mb-5 rounded-2xl p-3 text-sm ${error ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"}`}>
+        <div
+          className={`mb-5 rounded-2xl p-3 text-sm ${
+            error
+              ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+              : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          }`}
+        >
           {error || message}
         </div>
       )}
@@ -122,7 +205,9 @@ export default function Settings() {
             <div>
               <p className="text-sm font-semibold text-emerald-600">Unique Mess ID</p>
               <h3 className="mt-1 text-lg font-bold">Member access code</h3>
-              <p className="mt-1 text-sm text-slate-500">Only people who sign in and join with this ID can open this mess workspace.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Only people who sign in and join with this ID can open this mess workspace.
+              </p>
             </div>
             <ShieldAlert className="h-6 w-6 text-emerald-600" />
           </div>
@@ -145,53 +230,92 @@ export default function Settings() {
           )}
         </div>
 
-        <div className="card">
-          <h3 className="text-lg font-bold">Automatic payment warning</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            When a member stays in negative balance, the app creates a targeted warning and can automatically suspend new meal entries after the configured number of days.
-          </p>
+        <form className="card overflow-hidden" onSubmit={saveWarningSettings}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
+                  <BellRing className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Automatic payment warning</h3>
+                  <p className="text-xs font-medium text-emerald-600">Due date counts as Day 1</p>
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                A warning is sent on the configured due day. If the balance remains due, automatic meal suspension can start on the later meal-off day.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                <BellRing className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-wide">First warning</span>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Day {warningDay}</p>
+            </div>
+            <div className="rounded-2xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900/70 dark:bg-red-950/20">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+                <Utensils className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-wide">Meal off</span>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Day {mealOffDay}</p>
+            </div>
+          </div>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label">Warning after (days)</label>
+              <label className="label" htmlFor="warning-after-days">Warning on due day</label>
               <input
+                id="warning-after-days"
                 className="input"
                 type="number"
-                min="0"
-                value={form.warningSettings.warningAfterDays}
-                onChange={(e) => setForm({ ...form, warningSettings: { ...form.warningSettings, warningAfterDays: e.target.value } })}
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={warningForm.warningAfterDays}
+                onChange={(e) => setWarningDay(e.target.value)}
                 disabled={!isManager}
               />
+              <p className="mt-1 text-xs text-slate-500">Example: 4 means the first warning is sent on Day 4.</p>
             </div>
             <div>
-              <label className="label">Meal off after (days)</label>
+              <label className="label" htmlFor="meal-off-after-days">Meal off on due day</label>
               <input
+                id="meal-off-after-days"
                 className="input"
                 type="number"
-                min="0"
-                value={form.warningSettings.mealOffAfterDays}
-                onChange={(e) => setForm({ ...form, warningSettings: { ...form.warningSettings, mealOffAfterDays: e.target.value } })}
+                min={warningDay + 1}
+                step="1"
+                inputMode="numeric"
+                value={warningForm.mealOffAfterDays}
+                onChange={(e) => setWarningForm({ ...warningForm, mealOffAfterDays: e.target.value })}
                 disabled={!isManager}
               />
+              <p className="mt-1 text-xs text-slate-500">Must be later than the first warning day.</p>
             </div>
             <div>
-              <label className="label">Minimum due ({form.currency})</label>
+              <label className="label" htmlFor="minimum-due">Minimum due ({messForm.currency})</label>
               <input
+                id="minimum-due"
                 className="input"
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.warningSettings.minimumDue}
-                onChange={(e) => setForm({ ...form, warningSettings: { ...form.warningSettings, minimumDue: e.target.value } })}
+                value={warningForm.minimumDue}
+                onChange={(e) => setWarningForm({ ...warningForm, minimumDue: e.target.value })}
                 disabled={!isManager}
               />
+              <p className="mt-1 text-xs text-slate-500">Balances below this amount do not start the due timer.</p>
             </div>
             <div className="flex items-end">
-              <label className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+              <label className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
                 <input
                   type="checkbox"
-                  checked={form.warningSettings.autoSuspendMeals}
-                  onChange={(e) => setForm({ ...form, warningSettings: { ...form.warningSettings, autoSuspendMeals: e.target.checked } })}
+                  checked={warningForm.autoSuspendMeals}
+                  onChange={(e) => setWarningForm({ ...warningForm, autoSuspendMeals: e.target.checked })}
                   disabled={!isManager}
                 />
                 Auto meal suspension
@@ -199,33 +323,58 @@ export default function Settings() {
             </div>
           </div>
 
-          <label className="mt-4 flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={form.warningSettings.enabled}
-              onChange={(e) => setForm({ ...form, warningSettings: { ...form.warningSettings, enabled: e.target.checked } })}
-              disabled={!isManager}
-            />
-            Enable payment warning automation
-          </label>
-        </div>
+          <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70">
+            <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+              <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+              <p>
+                Timer starts only while the member remains at least {Number(warningForm.minimumDue || 0)} {messForm.currency} in negative balance. Clearing the due resets the timer and automatically restores meals if they were suspended by this automation.
+              </p>
+            </div>
+          </div>
+
+          {warningValidation && isManager && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{warningValidation}</span>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={warningForm.enabled}
+                onChange={(e) => setWarningForm({ ...warningForm, enabled: e.target.checked })}
+                disabled={!isManager}
+              />
+              Enable payment warning automation
+            </label>
+
+            {isManager && (
+              <button className="btn-primary gap-2" type="submit" disabled={Boolean(warningValidation)}>
+                <Save className="h-4 w-4" />
+                Save automation
+              </button>
+            )}
+          </div>
+        </form>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <form className="card" onSubmit={save}>
+        <form className="card" onSubmit={saveMessSettings}>
           <h3 className="mb-4 text-lg font-bold">Mess settings</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">Mess name</label>
-              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!isManager} />
+              <input className="input" value={messForm.name} onChange={(e) => setMessForm({ ...messForm, name: e.target.value })} disabled={!isManager} />
             </div>
             <div>
               <label className="label">Month</label>
-              <input className="input" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} disabled={!isManager} />
+              <input className="input" type="month" value={messForm.month} onChange={(e) => setMessForm({ ...messForm, month: e.target.value })} disabled={!isManager} />
             </div>
             <div>
               <label className="label">Currency</label>
-              <select className="input" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} disabled={!isManager}>
+              <select className="input" value={messForm.currency} onChange={(e) => setMessForm({ ...messForm, currency: e.target.value })} disabled={!isManager}>
                 <option>BDT</option>
                 <option>USD</option>
                 <option>INR</option>
@@ -233,15 +382,15 @@ export default function Settings() {
             </div>
             <div>
               <label className="label">Monthly rent</label>
-              <input className="input" type="number" value={form.monthlyRent} onChange={(e) => setForm({ ...form, monthlyRent: e.target.value })} disabled={!isManager} />
+              <input className="input" type="number" min="0" value={messForm.monthlyRent} onChange={(e) => setMessForm({ ...messForm, monthlyRent: e.target.value })} disabled={!isManager} />
             </div>
             <div>
               <label className="label">Service charge</label>
-              <input className="input" type="number" value={form.serviceCharge} onChange={(e) => setForm({ ...form, serviceCharge: e.target.value })} disabled={!isManager} />
+              <input className="input" type="number" min="0" value={messForm.serviceCharge} onChange={(e) => setMessForm({ ...messForm, serviceCharge: e.target.value })} disabled={!isManager} />
             </div>
             <div>
               <label className="label">Address</label>
-              <input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} disabled={!isManager} />
+              <input className="input" value={messForm.address} onChange={(e) => setMessForm({ ...messForm, address: e.target.value })} disabled={!isManager} />
             </div>
           </div>
           {isManager && <button className="btn-primary mt-5">Save settings</button>}

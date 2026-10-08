@@ -9,11 +9,16 @@ const buildVersion =
   `local-${Date.now()}`;
 
 const builtAt = new Date().toISOString();
+const releaseNotes = [
+  "Improved performance and stability",
+  "Better warning and meal-off automation",
+  "Various bug fixes and UI improvements",
+];
 const publicDir = path.resolve(process.cwd(), "public");
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(
   path.join(publicDir, "version.json"),
-  JSON.stringify({ version: buildVersion, builtAt }, null, 2),
+  JSON.stringify({ version: buildVersion, builtAt, notes: releaseNotes }, null, 2),
   "utf8"
 );
 

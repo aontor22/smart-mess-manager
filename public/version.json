@@ -1,4 +1,9 @@
 {
-  "version": "local-1791341035218",
-  "builtAt": "2026-10-07T02:43:55.218Z"
+  "version": "local-1791426277340",
+  "builtAt": "2026-10-08T02:24:37.340Z",
+  "notes": [
+    "Improved performance and stability",
+    "Better warning and meal-off automation",
+    "Various bug fixes and UI improvements"
+  ]
 }

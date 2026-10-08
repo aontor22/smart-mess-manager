@@ -20,7 +20,7 @@ import {
   transferMessManager,
   updateOwnMessProfile,
 } from "../utils/cloudSync";
-import { applyWarningAutomation } from "../utils/warnings";
+import { applyWarningAutomation, localDateKey } from "../utils/warnings";
 import { buildMealBatch } from "../utils/mealBatch";
 import { normalizeEditableProfile, updateOwnProfileInStore } from "../utils/profile";
 
@@ -116,12 +116,33 @@ export function DataProvider({ children }) {
   const [syncStatus, setSyncStatus] = useState("offline-ready");
   const [workspaceStatus, setWorkspaceStatus] = useState("loading");
   const [membership, setMembership] = useState(null);
+  const [warningDateKey, setWarningDateKey] = useState(() => localDateKey());
   const storeRef = useRef(store);
   const syncQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
     storeRef.current = store;
   }, [store]);
+
+  // Warning/meal-off thresholds depend on calendar days, not only data edits.
+  // Re-check the local date while the app stays open so a Day 4 warning or
+  // Day 7 meal suspension cannot be delayed until the next transaction/reload.
+  useEffect(() => {
+    const refreshWarningDate = () => setWarningDateKey(localDateKey());
+    const interval = window.setInterval(refreshWarningDate, 60 * 1000);
+    const onFocus = () => refreshWarningDate();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshWarningDate();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (authLoading) return undefined;
@@ -340,7 +361,7 @@ export function DataProvider({ children }) {
   useEffect(() => {
     if (workspaceStatus !== "ready" || !messId || !activeMess) return;
 
-    const automated = applyWarningAutomation(storeRef.current, messId, monthly);
+    const automated = applyWarningAutomation(storeRef.current, messId, monthly, { todayKey: warningDateKey });
     if (automated.changed) persist(automated.store);
     // Intentionally keyed to financial/member changes. persist() is guarded by changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -353,6 +374,7 @@ export function DataProvider({ children }) {
     activeMess?.warningSettings?.mealOffAfterDays,
     activeMess?.warningSettings?.minimumDue,
     activeMess?.warningSettings?.autoSuspendMeals,
+    warningDateKey,
     store.members,
     store.deposits,
     store.meals,
