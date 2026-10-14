@@ -1,4 +1,5 @@
 version: 2
+
 updates:
   - package-ecosystem: npm
     directory: /
@@ -6,9 +7,25 @@ updates:
       interval: weekly
       day: monday
       time: "04:00"
+
     open-pull-requests-limit: 5
+
     groups:
       production-dependencies:
         dependency-type: production
+
       development-dependencies:
         dependency-type: development
+
+    ignore:
+      - dependency-name: "tailwindcss"
+        update-types:
+          - "version-update:semver-major"
+
+      - dependency-name: "postcss"
+        update-types:
+          - "version-update:semver-major"
+
+      - dependency-name: "autoprefixer"
+        update-types:
+          - "version-update:semver-major"
