@@ -1,5 +1,19 @@
-node_modules
-dist
+node_modules/
+dist/
+
+# Local environment files (keep templates such as .env.example)
 .env
-.DS_Store
+.env.*
+!.env.example
+
+# Local/editor/OS files
 *.local
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and test artifacts
+*.log
+coverage/
+playwright-report/
+test-results/
