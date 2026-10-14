@@ -23,6 +23,7 @@ import {
 import { applyWarningAutomation, localDateKey } from "../utils/warnings";
 import { buildMealBatch } from "../utils/mealBatch";
 import { normalizeEditableProfile, updateOwnProfileInStore } from "../utils/profile";
+import { isFinancialCollection, normalizeTransactionRow } from "../utils/transactions";
 
 const DataContext = createContext(null);
 
@@ -419,6 +420,11 @@ export function DataProvider({ children }) {
       };
       delete safeRow.messId;
       delete safeRow.id;
+    } else if (isFinancialCollection(collection)) {
+      safeRow = normalizeTransactionRow(collection, safeRow, {
+        messId,
+        members: fresh.members,
+      });
     }
 
     const next = {
@@ -444,9 +450,22 @@ export function DataProvider({ children }) {
       delete safePatch.userId;
     }
 
+    const normalizedPatch = isFinancialCollection(collection)
+      ? normalizeTransactionRow(collection, { ...target, ...safePatch }, {
+          messId,
+          members: fresh.members,
+        })
+      : safePatch;
+
     const next = {
       ...fresh,
-      [collection]: fresh[collection].map((row) => (row.id === rowId ? { ...row, ...safePatch } : row)),
+      [collection]: fresh[collection].map((row) =>
+        row.id === rowId
+          ? isFinancialCollection(collection)
+            ? { ...normalizedPatch, id: row.id, messId: row.messId }
+            : { ...row, ...normalizedPatch }
+          : row
+      ),
     };
     persist(log(next, action));
   };

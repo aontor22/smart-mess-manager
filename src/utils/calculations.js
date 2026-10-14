@@ -11,10 +11,15 @@ export const filterByMonth = (rows, dateField, month) =>
 
 export function calculateMonthly({ mess, members, meals, marketCosts, deposits, expenses }) {
   const month = mess?.month || new Date().toISOString().slice(0, 7);
-  const monthMeals = filterByMonth(meals, "mealDate", month);
-  const monthMarket = filterByMonth(marketCosts, "costDate", month);
-  const monthDeposits = filterByMonth(deposits, "depositDate", month);
-  const monthExpenses = filterByMonth(expenses, "expenseDate", month);
+  // Defense in depth: callers normally pre-filter by active mess, but the
+  // calculation itself must never mix explicitly tagged records from another
+  // workspace. Legacy/imported rows without messId remain supported.
+  const belongsToMess = (row) => !mess?.id || !row?.messId || row.messId === mess.id;
+  const scopedMembers = members.filter(belongsToMess);
+  const monthMeals = filterByMonth(meals.filter(belongsToMess), "mealDate", month);
+  const monthMarket = filterByMonth(marketCosts.filter(belongsToMess), "costDate", month);
+  const monthDeposits = filterByMonth(deposits.filter(belongsToMess), "depositDate", month);
+  const monthExpenses = filterByMonth(expenses.filter(belongsToMess), "expenseDate", month);
 
   // Historical reports must retain members who had transactions in that month
   // even if they are inactive/archived today. Current active members remain part
@@ -24,7 +29,7 @@ export function calculateMonthly({ mess, members, meals, marketCosts, deposits, 
     ...monthDeposits.map((row) => row.memberId),
     ...monthExpenses.map((row) => row.assignedMemberId).filter(Boolean),
   ]);
-  const activeMembers = members.filter(
+  const activeMembers = scopedMembers.filter(
     (member) => member.status === "active" || monthMemberIds.has(member.id)
   );
 
