@@ -90,7 +90,7 @@ export default function Expenses() {
           </div>
           <div>
             <label className="label">Amount</label>
-            <input className="input" type="number" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+            <input className="input" type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
           </div>
           <div>
             <label className="label">Split type</label>
