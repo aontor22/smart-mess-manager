@@ -359,13 +359,17 @@ export function DataProvider({ children }) {
       };
 
   useEffect(() => {
-    if (workspaceStatus !== "ready" || !messId || !activeMess) return;
+    // Warning automation mutates shared financial/member state. Only the
+    // authoritative manager client may persist those transitions; members
+    // receive the resulting notice/meal state through normal cloud sync.
+    if (!isManager || workspaceStatus !== "ready" || !messId || !activeMess) return;
 
     const automated = applyWarningAutomation(storeRef.current, messId, monthly, { todayKey: warningDateKey });
     if (automated.changed) persist(automated.store);
     // Intentionally keyed to financial/member changes. persist() is guarded by changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    isManager,
     workspaceStatus,
     messId,
     activeMess?.month,
@@ -382,6 +386,12 @@ export function DataProvider({ children }) {
     store.expenses,
   ]);
 
+  const assertManagerMutation = () => {
+    if (!isManager || workspaceStatus !== "ready") {
+      throw new Error("Only the current manager can modify shared mess data.");
+    }
+  };
+
   const log = (data, action) => ({
     ...data,
     activityLogs: [
@@ -397,19 +407,46 @@ export function DataProvider({ children }) {
   });
 
   const addRow = (collection, row, action) => {
+    assertManagerMutation();
     const fresh = loadStore(ownerId, currentUser || undefined);
+    let safeRow = { ...row };
+
+    if (collection === "members") {
+      safeRow = {
+        ...safeRow,
+        role: "member",
+        userId: null,
+      };
+      delete safeRow.messId;
+      delete safeRow.id;
+    }
+
     const next = {
       ...fresh,
-      [collection]: [...fresh[collection], { id: makeId(), messId, ...row }],
+      [collection]: [...fresh[collection], { id: makeId(), messId, ...safeRow }],
     };
     persist(log(next, action));
   };
 
   const updateRow = (collection, rowId, patch, action) => {
+    assertManagerMutation();
     const fresh = loadStore(ownerId, currentUser || undefined);
+    const target = fresh[collection]?.find((row) => row.id === rowId);
+    if (!target || target.messId !== messId) throw new Error("This record does not belong to the active mess.");
+
+    const safePatch = { ...patch };
+    delete safePatch.id;
+    delete safePatch.messId;
+
+    if (collection === "members") {
+      // Account linkage and manager role are controlled by join/transfer RPCs.
+      delete safePatch.role;
+      delete safePatch.userId;
+    }
+
     const next = {
       ...fresh,
-      [collection]: fresh[collection].map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
+      [collection]: fresh[collection].map((row) => (row.id === rowId ? { ...row, ...safePatch } : row)),
     };
     persist(log(next, action));
   };
@@ -433,7 +470,13 @@ export function DataProvider({ children }) {
   };
 
   const deleteRow = (collection, rowId, action) => {
+    assertManagerMutation();
     const fresh = loadStore(ownerId, currentUser || undefined);
+    const target = fresh[collection]?.find((row) => row.id === rowId);
+    if (!target || target.messId !== messId) throw new Error("This record does not belong to the active mess.");
+    if (collection === "members" && target.role === "manager") {
+      throw new Error("The current manager cannot be deleted. Transfer manager access first.");
+    }
     const next = {
       ...fresh,
       [collection]: fresh[collection].filter((row) => row.id !== rowId),
@@ -511,6 +554,7 @@ export function DataProvider({ children }) {
   };
 
   const updateMess = (patch) => {
+    assertManagerMutation();
     const fresh = loadStore(ownerId, currentUser || undefined);
     const next = {
       ...fresh,
@@ -587,8 +631,35 @@ export function DataProvider({ children }) {
     if (currentUser && isSupabaseConfigured && navigator.onLine) {
       const result = await transferMessManager(messId, selectedMember.userId);
       if (!result.ok) throw new Error(result.error?.message || "Could not transfer manager role.");
+
+      if (result.state) {
+        const syncedAt = result.updatedAt || new Date().toISOString();
+        const next = normalizeStore({
+          ...result.state,
+          ownerId,
+          currentUserId: currentUser.id,
+          syncMeta: {
+            ...(result.state.syncMeta || {}),
+            updatedAt: result.state.syncMeta?.updatedAt || syncedAt,
+            lastSyncedAt: syncedAt,
+            lastSyncSource: "supabase",
+            pendingSync: false,
+          },
+        });
+        saveStore(next, ownerId);
+        storeRef.current = next;
+        setStore(next);
+        setMembership((prev) =>
+          prev ? { ...prev, role: "member", status: "active" } : prev
+        );
+        setSyncStatus("synced");
+        window.dispatchEvent(new Event("smm-store-updated"));
+        return;
+      }
     }
 
+    // Offline/local fallback. The next authenticated sync will reconcile against
+    // the authoritative membership role stored in Supabase.
     const next = {
       ...fresh,
       messes: fresh.messes.map((mess) =>
@@ -608,6 +679,7 @@ export function DataProvider({ children }) {
   };
 
   const resetDemoData = () => {
+    assertManagerMutation();
     const fresh = loadStore(ownerId, currentUser || undefined);
     const now = new Date().toISOString();
     const next = {

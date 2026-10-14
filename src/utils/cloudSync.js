@@ -252,13 +252,18 @@ export async function transferMessManager(messId, nextManagerUserId) {
     return { ok: false, error: new Error("The selected member must have joined with an account first.") };
   }
 
-  const { error } = await supabase.rpc("transfer_mess_manager", {
+  const { data, error } = await supabase.rpc("transfer_mess_manager", {
     p_mess_id: messId,
     p_new_manager_user_id: nextManagerUserId,
   });
 
   if (error) return { ok: false, error };
-  return { ok: true };
+  return {
+    ok: true,
+    state: data?.state ? normalizeStore(data.state) : null,
+    updatedAt: data?.updated_at || null,
+    managerUserId: data?.manager_user_id || nextManagerUserId,
+  };
 }
 
 export async function pushStoreToSupabase(store, user) {
@@ -291,20 +296,47 @@ export async function pushStoreToSupabase(store, user) {
     },
   });
 
-  const { error } = await supabase
-    .from("mess_workspaces")
-    .update({
-      name: activeMess?.name || "My Mess",
-      state: cleanStore,
-    })
-    .eq("id", membership.mess_id);
-
-  if (error) {
-    console.warn("Shared mess push failed:", error.message);
-    return { ok: false, error, membership };
+  // Full shared-state writes are manager-only. Regular members receive the
+  // authoritative cloud snapshot and can mutate only explicitly permitted fields
+  // through narrow RPCs such as update_own_mess_profile.
+  if (membership.role !== "manager") {
+    const workspace = await pullMessWorkspace(membership.mess_id);
+    return {
+      ok: Boolean(workspace?.state),
+      store: workspace?.state || store,
+      membership,
+      source: "cloud",
+      readOnly: true,
+    };
   }
 
-  return { ok: true, store: cleanStore, membership };
+  const { data, error } = await supabase.rpc("manager_update_mess_workspace", {
+    p_mess_id: membership.mess_id,
+    p_name: activeMess?.name || "My Mess",
+    p_state: cleanStore,
+  });
+
+  if (error) {
+    const missingRpc =
+      error.code === "PGRST202" ||
+      /manager_update_mess_workspace|function.*does not exist|schema cache/i.test(error.message || "");
+    const wrapped = new Error(
+      missingRpc
+        ? "Security hardening SQL is not installed yet. Run database/security-rls-hardening.sql once, then retry."
+        : error.message || "Shared mess push failed."
+    );
+    wrapped.code = error.code;
+    wrapped.requiresSecuritySql = missingRpc;
+    console.warn("Shared mess push failed:", wrapped.message);
+    return { ok: false, error: wrapped, membership };
+  }
+
+  return {
+    ok: true,
+    store: data?.state ? normalizeStore(data.state) : cleanStore,
+    membership,
+    source: "manager-rpc",
+  };
 }
 
 export async function syncLocalWithSupabase(localStore, user) {
