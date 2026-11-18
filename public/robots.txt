@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://smart-mess-manager-nu.vercel.app/sitemap.xml
