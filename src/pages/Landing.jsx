@@ -102,6 +102,7 @@ export default function Landing() {
             <span className="text-sky-400">Udoy Chowdhury</span>
           </p>
       
+          <a href="/features.html" className="seo-features-link" style={{ textDecoration: "underline" }}>Features & how it works</a>
           <div className="flex items-center gap-2 text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
             <span>All systems operational</span>
